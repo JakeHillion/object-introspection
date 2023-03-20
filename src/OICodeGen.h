@@ -228,6 +228,7 @@ class OICodeGen {
                                   bool& ifStub);
   bool getContainerTemplateParams(drgn_type* type, bool& ifStub);
   void enumerateDescendants(drgn_type* type, drgn_type* baseType);
+  std::string getFuncDefTreeBuilderType(drgn_type* type, const std::string&);
   void getFuncDefinitionStr(std::string& code, drgn_type* type,
                             const std::string& typeName);
   std::optional<uint64_t> getDrgnTypeSize(drgn_type* type);

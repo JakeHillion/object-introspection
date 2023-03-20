@@ -9,22 +9,33 @@ allocatorIndex = 3
 
 [codegen]
 decl = """
-template<class Key, class T, class Compare, class Allocator>
-void getSizeType(const %1%<Key,T,Compare,Allocator> &container, size_t& returnArg);
+template <typename DB, typename T0, typename T1, typename T2, typename T3>
+struct TypeHandler<DB, %1%<T0, T1, T2, T3>> {
+  using type = StaticTypes::List<DB, StaticTypes::Pair<DB,
+      typename TypeHandler<DB, T0>::type,
+      typename TypeHandler<DB, T1>::type
+    >>;
+
+  static StaticTypes::Unit<DB> getSizeType(
+      const %1%<T0, T1, T2, T3>& container,
+      typename TypeHandler<DB, %1%<T0, T1, T2, T3>>::type returnArg) {
+    auto tail = returnArg.write(container.size());
+
+    // The double ampersand is needed otherwise this loop doesn't work with
+    // vector<bool>
+    for (auto&& it : container) {
+      tail = tail.delegate([&it](auto ret) {
+        return OIInternal::getSizeType<DB>(it.second, ret.delegate([&it](auto ret) {
+            return OIInternal::getSizeType<DB>(it.first, ret);
+        }));
+      });
+    }
+
+    return tail.finish();
+  }
+};
 """
 
 func = """
-template<class Key, class T, class Compare, class Allocator>
-void getSizeType(const %1%<Key,T,Compare,Allocator> &container, size_t& returnArg)
-{
-    SAVE_SIZE(sizeof(%1%<Key,T,Compare,Allocator>));
-
-    SAVE_DATA((uintptr_t)container.size());
-
-    for (auto const& it : container)
-    {
-    getSizeType(it.first, returnArg);
-    getSizeType(it.second, returnArg);
-    }
-}
+// DummyFunc %1%
 """

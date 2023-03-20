@@ -8,15 +8,19 @@ replaceTemplateParamIndex = []
 
 [codegen]
 decl = """
-template<typename T>
-void getSizeType(const %1%<T> &s_ptr, size_t& returnArg);
+template <typename DB, typename T0>
+struct TypeHandler<DB, %1%<T0>> {
+  using type = StaticTypes::Unit<DB>;
+
+  static StaticTypes::Unit<DB> getSizeType(
+      const %1%<T0>& container,
+      typename TypeHandler<DB, %1%<T0>>::type returnArg) {
+    return returnArg;
+  }
+};
 """
 
 # Weak pointers do not have ownership, so let's not follow them (for now)
 func = """
-template<typename T>
-void getSizeType(const %1%<T> &s_ptr, size_t& returnArg)
-{
-    SAVE_SIZE(sizeof(%1%<T>));
-}
+// DummyFunc %1%
 """

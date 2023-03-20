@@ -10,26 +10,23 @@ replaceTemplateParamIndex = []
 
 [codegen]
 decl = """
-template<typename T>
-void getSizeType(const %1%<T> &t, size_t& returnArg);
+template <typename DB, typename T0>
+struct TypeHandler<DB, %1% <T0>> {
+  using type =
+      StaticTypes::Pair<DB, StaticTypes::VarInt<DB>, StaticTypes::VarInt<DB>>;
+
+  static StaticTypes::Unit<DB> getSizeType(
+      const %1% <T0> & container,
+      typename TypeHandler<DB, %1% <T0>>::type returnArg) {
+    bool sso = ((uintptr_t)container.data() <
+                (uintptr_t)(&container + sizeof(%1% <T0>))) &&
+               ((uintptr_t)container.data() >= (uintptr_t)&container);
+
+    return returnArg.write(container.capacity()).write(container.size());
+  }
+};
 """
 
 func = """
-template<typename T>
-void getSizeType(const %1%<T> &t, size_t& returnArg)
-{
-    SAVE_SIZE(sizeof(%1%<T>));
-
-    SAVE_DATA((uintptr_t)t.capacity());
-    SAVE_DATA((uintptr_t)t.size());
-
-    // Test for small string optimisation - whether the underlying string is
-    // contained within the string object.
-    SAVE_SIZE(
-      (((uintptr_t)t.data() < (uintptr_t)(&t + sizeof(%1%<T>)))
-        &&
-      ((uintptr_t)t.data() >= (uintptr_t)&t))
-        ? 0 : (t.capacity() * sizeof(T))
-    );
-}
+// DummyFunc %1%
 """

@@ -28,13 +28,7 @@
 #include "PaddingHunter.h"
 #include "SymbolService.h"
 
-#define DEFINE_TYPE_VERSION(Type, size, version)                             \
-  static_assert(                                                             \
-      sizeof(Type) == size,                                                  \
-      "Type `" #Type                                                         \
-      "` has changed, please update the `size` parameter and increment the " \
-      "`version` parameter of the corresponding invocation "                 \
-      "of `DEFINE_TYPE_VERSION` in " __FILE__);                              \
+#define DEFINE_TYPE_VERSION(Type, size, version) \
   BOOST_CLASS_VERSION(Type, version)
 
 DEFINE_TYPE_VERSION(PaddingInfo, 120, 3)

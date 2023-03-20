@@ -10,16 +10,22 @@ replaceTemplateParamIndex = []
 
 [codegen]
 decl = """
-template<typename T>
-void getSizeType(const %1%<T> &s_ptr, size_t& returnArg);
+template <typename DB, typename T0>
+struct TypeHandler<DB, %1%<T0>> {
+    using type = StaticTypes::Pair<DB,
+      StaticTypes::VarInt<DB>,
+      typename TypeHandler<DB, T0>::type
+    >;
+
+    static StaticTypes::Unit<DB> getSizeType(
+        const %1%<T0>& container,
+        typename TypeHandler<DB, %1%<T0>>::type returnArg) {
+      auto r0 = returnArg.write((uintptr_t)&(container.get()));
+      return OIInternal::getSizeType<DB>(container.get(), r0);
+    }
+};
 """
 
 func = """
-template<typename T>
-void getSizeType(const %1%<T> &ref, size_t& returnArg)
-{
-    SAVE_SIZE(sizeof(%1%<T>));
-    SAVE_DATA((uintptr_t)&(ref.get()));
-    getSizeType(ref.get(), returnArg);
-}
+// DummyFunc %1%
 """

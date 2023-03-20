@@ -427,8 +427,7 @@ TreeBuilder::Node TreeBuilder::process(NodeID id, Variable variable) {
             auto innerTypeKind = drgn_type_kind(entry->second);
             if (innerTypeKind != DRGN_TYPE_FUNCTION) {
               node.pointer = next();
-              if (innerTypeKind == DRGN_TYPE_VOID ||
-                  !shouldProcess(*node.pointer)) {
+              if (innerTypeKind == DRGN_TYPE_VOID || next() == 0) {
                 break;
               }
             }
@@ -626,7 +625,7 @@ void TreeBuilder::processContainer(const Variable& variable, Node& node) {
       node.pointer = next();
       containerStats.length = *node.pointer ? 1 : 0;
       containerStats.capacity = 1;
-      if (!shouldProcess(*node.pointer)) {
+      if (next() == 0) {
         return;
       }
       break;

@@ -134,13 +134,6 @@ const std::string typedValueFunc = R"(
 
 }  // namespace
 
-void FuncGen::DeclareGetSize(std::string& testCode, const std::string& type) {
-  boost::format fmt =
-      boost::format("void getSizeType(const %1% &t, size_t& returnArg);\n") %
-      type;
-  testCode.append(fmt.str());
-}
-
 void FuncGen::DeclareTopLevelGetSize(std::string& testCode,
                                      const std::string& type) {
   boost::format fmt = boost::format("void getSizeType(const %1% &t);\n") % type;
@@ -158,6 +151,59 @@ void FuncGen::DeclareEncodeData(std::string& testCode) {
 void FuncGen::DeclareEncodeDataSize(std::string& testCode) {
   testCode.append("size_t EncodeVarintSize(uint64_t val);\n");
 }
+void FuncGen::DeclareBasicTypeHandlers(std::string& testCode) {
+  testCode.append(R"(
+template <typename DB, typename T>
+struct TypeHandler {
+  private:
+    static auto choose_type() {
+        if constexpr(std::is_pointer_v<T>) {
+            return std::type_identity<StaticTypes::Pair<DB,
+              StaticTypes::VarInt<DB>,
+              StaticTypes::Sum<DB,
+                StaticTypes::Unit<DB>,
+                typename TypeHandler<DB, std::remove_pointer_t<T>>::type
+            >>>();
+        } else {
+            return std::type_identity<StaticTypes::Unit<DB>>();
+        }
+    }
+
+  public:
+    using type = typename decltype(choose_type())::type;
+
+    static StaticTypes::Unit<DB> getSizeType(
+      const T& t,
+      typename TypeHandler<DB, T>::type returnArg) {
+        if constexpr(std::is_pointer_v<T>) {
+          JLOG("ptr val @");
+          JLOGPTR(t);
+          auto r0 = returnArg.write((uintptr_t)t);
+          if (t && pointers.add((uintptr_t)t)) {
+            return r0.template delegate<1>([&t](auto ret) {
+              if constexpr (!std::is_void<std::remove_pointer_t<T>>::value) {
+                return TypeHandler<DB, std::remove_pointer_t<T>>::getSizeType(*t, ret);
+              } else {
+                return ret;
+              }
+            });
+          } else {
+            return r0.template delegate<0>(std::identity());
+          }
+        } else {
+          return returnArg;
+        }
+      }
+};
+
+template <typename DB>
+class TypeHandler<DB, void> {
+  public:
+    using type = StaticTypes::Unit<DB>;
+};
+  )");
+}
+
 void FuncGen::DefineEncodeData(std::string& testCode) {
   std::string func = R"(
       size_t EncodeVarint(uint64_t val, uint8_t* buf) {
@@ -245,6 +291,7 @@ void FuncGen::DefineTopLevelGetSizeRef(std::string& testCode,
     {
       pointers.initialize();
       pointers.add((uintptr_t)&t);
+
       auto data = reinterpret_cast<uintptr_t*>(dataBase);
       data[0] = oidMagicId;
       data[1] = cookieValue;
@@ -254,9 +301,21 @@ void FuncGen::DefineTopLevelGetSizeRef(std::string& testCode,
       OIInternal::StoreData((uintptr_t)(&t), dataSegOffset);
       JLOG("%1% @");
       JLOGPTR(&t);
-      OIInternal::getSizeType(t, dataSegOffset);
-      OIInternal::StoreData((uintptr_t)123456789, dataSegOffset);
-      OIInternal::StoreData((uintptr_t)123456789, dataSegOffset);
+
+      using DataBufferType = OIInternal::TypeHandler<DataBuffer::DataSegment, OIInternal::__ROOT_TYPE__>::type;
+      DataBufferType db = DataBuffer::DataSegment(dataSegOffset);
+
+      StaticTypes::Unit<DataBuffer::DataSegment> out = OIInternal::getSizeType<DataBuffer::DataSegment>(t, db);
+
+      StaticTypes::Unit<DataBuffer::DataSegment> final = out.template cast<StaticTypes::Pair<
+        DataBuffer::DataSegment,
+        StaticTypes::VarInt<DataBuffer::DataSegment>,
+        StaticTypes::VarInt<DataBuffer::DataSegment>
+      >>()
+        .write(123456789)
+        .write(123456789);
+
+      dataSegOffset = final.bust() - dataBase;
       data[2] = dataSegOffset;
       dataBase += dataSegOffset;
     }
@@ -289,57 +348,28 @@ void FuncGen::DefineTopLevelGetSizeRefRet(std::string& testCode,
   testCode.append(fmt.str());
 }
 
-void FuncGen::DefineTopLevelGetSizeSmartPtr(std::string& testCode,
-                                            const std::string& rawType) {
-  std::string func = R"(
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Wunknown-attributes"
-    /* RawType: %1% */
-    void __attribute__((used, retain)) getSize_%2$016x(const OIInternal::__ROOT_TYPE__& t)
-    #pragma GCC diagnostic pop
-    {
-      pointers.initialize();
-      auto data = reinterpret_cast<uintptr_t*>(dataBase);
-      data[0] = oidMagicId;
-      data[1] = cookieValue;
-      data[2] = 0;
-
-      size_t dataSegOffset = 3 * sizeof(uintptr_t);
-      OIInternal::StoreData((uintptr_t)(&t), dataSegOffset);
-
-      OIInternal::getSizeType(t, dataSegOffset);
-      OIInternal::StoreData((uintptr_t)123456789, dataSegOffset);
-      OIInternal::StoreData((uintptr_t)123456789, dataSegOffset);
-      data[2] = dataSegOffset;
-      dataBase += dataSegOffset;
-    }
-    )";
-
-  boost::format fmt =
-      boost::format(func) % rawType % std::hash<std::string>{}(rawType);
-  testCode.append(fmt.str());
-}
-
 bool FuncGen::DeclareGetSizeFuncs(std::string& testCode,
                                   const ContainerInfoRefSet& containerInfo,
                                   bool chaseRawPointers) {
+  testCode.append(R"(template<typename DB, typename T>
+StaticTypes::Unit<DB>
+getSizeType(const T &t, typename TypeHandler<DB, T>::type returnArg) {
+  JLOG("obj @");
+  JLOGPTR(&t);
+  return TypeHandler<DB, T>::getSizeType(t, returnArg);
+}
+    )");
+
   for (const ContainerInfo& cInfo : containerInfo) {
     std::string ctype = cInfo.typeName;
     ctype = ctype.substr(0, ctype.find("<", 0));
 
     auto& decl = cInfo.codegen.decl;
+    LOG(ERROR) << "got here 0 decl";
     boost::format fmt = boost::format(decl) % ctype;
+    LOG(ERROR) << "got here 1 decl";
     testCode.append(fmt.str());
   }
-
-  if (chaseRawPointers) {
-    testCode.append(
-        "template<typename T, typename = "
-        "std::enable_if_t<!std::is_pointer_v<std::decay_t<T>>>>\n");
-  } else {
-    testCode.append("template<typename T>\n");
-  }
-  testCode.append("void getSizeType(const T &t, size_t& returnArg);");
 
   return true;
 }
@@ -352,23 +382,11 @@ bool FuncGen::DefineGetSizeFuncs(std::string& testCode,
     ctype = ctype.substr(0, ctype.find("<", 0));
 
     auto& func = cInfo.codegen.func;
+    LOG(ERROR) << "got here 0 func";
     boost::format fmt = boost::format(func) % ctype;
+    LOG(ERROR) << "got here 1 func";
     testCode.append(fmt.str());
   }
-
-  if (chaseRawPointers) {
-    testCode.append("template<typename T, typename C>\n");
-  } else {
-    testCode.append("template<typename T>\n");
-  }
-
-  testCode.append(R"(
-      void getSizeType(const T &t, size_t& returnArg) {
-        JLOG("obj @");
-        JLOGPTR(&t);
-        SAVE_SIZE(sizeof(T));
-      }
-    )");
 
   return true;
 }

@@ -154,6 +154,15 @@ std::unique_ptr<ContainerInfo> ContainerInfo::loadFromFile(
     return nullptr;
   }
 
+  // std::string outputType;
+  // if (std::optional<std::string> str =
+  //         (*codegen)["outputType"].value<std::string>()) {
+  //   func = std::move(*str);
+  // } else {
+  //   LOG(ERROR) << "`codegen.outputType` is a required field";
+  //   return nullptr;
+  // }
+
   return std::unique_ptr<ContainerInfo>(new ContainerInfo{
       std::move(typeName),
       std::move(matcher),
@@ -166,8 +175,9 @@ std::unique_ptr<ContainerInfo> ContainerInfo::loadFromFile(
       underlyingContainerIndex,
 
       {
-          std::move(decl),
-          std::move(func),
+          .outputType = "",
+          .decl = std::move(decl),
+          .func = std::move(func),
       },
   });
 }

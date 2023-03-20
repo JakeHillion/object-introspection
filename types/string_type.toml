@@ -10,18 +10,22 @@ replaceTemplateParamIndex = []
 
 [codegen]
 decl = """
-template<typename T>
-void getSizeType(const %1%<T> &t, size_t& returnArg);
+template <typename DB, typename T0>
+struct TypeHandler<DB, %1%<T0>> {
+    using type = StaticTypes::VarInt;
+};
+
+template<typename T0>
+Unit getSizeType(const %1%<T0> &t, TypeHandler<%1%<T0>> returnArg);
 """
 
 func = """
-template<typename T>
-void getSizeType(const %1%<T> &t, size_t& returnArg)
+template<typename T0>
+Unit getSizeType(const %1%<T0> &t, TypeHandler<%1%<T0>> returnArg)
 {
-    SAVE_SIZE(sizeof(%1%<T>));
+    SAVE_SIZE(sizeof(%1%<T0>));
 
-    SAVE_DATA((uintptr_t)t.capacity());
-    SAVE_DATA((uintptr_t)t.size());
+    return returnArg.write(t.capacity());
 
     // Test for small string optimisation - whether the underlying string is
     // contained within the string object.

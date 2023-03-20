@@ -1695,22 +1695,28 @@ void OICodeGen::getFuncDefClassMembers(
     code += ">;\n";
   }
 
+  if (members.size() == 0) {
+    code += "return returnArg;\n";
+    return;
+  }
+
+  code += "auto r1 = returnArg";
   for (std::size_t i = 0; i < members.size(); ++i) {
-    if (captureThriftIsset && i < members.size() - 1) {
-      // Capture Thrift's isset value for each field, except __isset itself,
-      // which we assume comes last
-      assert(members[i].member_name != "__isset");
-      std::string issetIdxStr =
-          "thrift_data::isset_indexes[" + std::to_string(i) + "]";
-      code += "{\n";
-      code += "  if (&thrift_data::isset_indexes != nullptr &&\n";
-      code += "      " + issetIdxStr + " != -1) {\n";
-      code += "    SAVE_DATA(t.__isset.get(" + issetIdxStr + "));\n";
-      code += "  } else {\n";
-      code += "    SAVE_DATA(-1);\n";
-      code += "  }\n";
-      code += "}\n";
-    }
+    // if (captureThriftIsset && i < members.size() - 1) {
+    //   // Capture Thrift's isset value for each field, except __isset itself,
+    //   // which we assume comes last
+    //   assert(members[i].member_name != "__isset");
+    //   std::string issetIdxStr =
+    //       "thrift_data::isset_indexes[" + std::to_string(i) + "]";
+    //   code += "{\n";
+    //   code += "  if (&thrift_data::isset_indexes != nullptr &&\n";
+    //   code += "      " + issetIdxStr + " != -1) {\n";
+    //   code += "    SAVE_DATA(t.__isset.get(" + issetIdxStr + "));\n";
+    //   code += "  } else {\n";
+    //   code += "    SAVE_DATA(-1);\n";
+    //   code += "  }\n";
+    //   code += "}\n";
+    // }
 
     const auto& member = members[i];
     std::string memberName = member.member_name;
@@ -1721,19 +1727,33 @@ void OICodeGen::getFuncDefClassMembers(
     if (memberName.empty()) {
       continue;
     }
-    /*
-     * Check if the member is a bit field (bitFieldSize > 0).
-     * If it is a bit field, we can't get its address with operator&.
-     * If it is *NOT* a bit field, then we can print its address.
-     */
-    if (member.bit_field_size > 0) {
-      code += "JLOG(\"" + memberName + " (bit_field)\\n\");\n";
-    } else {
-      code += "JLOG(\"" + memberName + " @\");\n";
-      code += "JLOGPTR(&t." + memberName + ");\n";
-    }
 
-    code += "getSizeType(t." + memberName + ", returnArg);\n";
+    if (i != members.size() - 1) {
+      code += "\n  .delegate([&t](auto ret) {\n";
+      /*
+       * Check if the member is a bit field (bitFieldSize > 0).
+       * If it is a bit field, we can't get its address with operator&.
+       * If it is *NOT* a bit field, then we can print its address.
+       */
+      if (member.bit_field_size > 0) {
+        code += "      JLOG(\"" + memberName + " (bit_field)\\n\");\n";
+      } else {
+        code += "      JLOG(\"" + memberName + " @\");\n";
+        code += "      JLOGPTR(&t." + memberName + ");\n";
+      }
+      code += "      return OIInternal::getSizeType<DB>(t." + memberName +
+              ", ret);\n";
+      code += "    })";
+    } else {
+      code += ";\n";
+      if (member.bit_field_size > 0) {
+        code += "    JLOG(\"" + memberName + " (bit_field)\\n\");\n";
+      } else {
+        code += "    JLOG(\"" + memberName + " @\");\n";
+        code += "    JLOGPTR(&t." + memberName + ");\n";
+      }
+      code += "    return OIInternal::getSizeType<DB>(t." + memberName + ", r1);\n";
+    }
   }
 }
 
@@ -1753,6 +1773,48 @@ void OICodeGen::enumerateDescendants(drgn_type* type, drgn_type* baseType) {
   }
 }
 
+std::string OICodeGen::getFuncDefTreeBuilderType(drgn_type* type,
+                                                 const std::string& typeName) {
+  if (drgn_type_kind(type) == DRGN_TYPE_TYPEDEF) {
+    // Handle case where parent is a typedef
+    return getFuncDefTreeBuilderType(drgnUnderlyingType(type), typeName);
+  }
+
+  std::string out;
+
+  size_t count = 0;
+  const auto& members = classMembersMap[type];
+  std::unordered_map<std::string, int> memberNames;
+  for (std::size_t i = 0; i < members.size(); ++i) {
+    const auto& member = members[i];
+
+    std::string memberName = member.member_name;
+    std::replace(memberName.begin(), memberName.end(), '.', '_');
+    deduplicateMemberName(memberNames, memberName);
+    if (memberName.empty()) {
+      continue;
+    }
+
+    if (i != members.size() - 1) {
+      out += "StaticTypes::Pair<DB, ";
+      count++;
+    }
+    out +=
+        (boost::format("typename TypeHandler<DB, decltype(%1%::%2%)>::type") %
+         typeName % memberName)
+            .str();
+    if (i != members.size() - 1) {
+      out += ", ";
+    }
+  }
+  out += std::string(count, '>');
+
+  if (!out.empty()) {
+    return out;
+  }
+  return "StaticTypes::Unit<DB>";
+}
+
 void OICodeGen::getFuncDefinitionStr(std::string& code, drgn_type* type,
                                      const std::string& typeName) {
   if (classMembersMap.find(type) == classMembersMap.end()) {
@@ -1764,13 +1826,24 @@ void OICodeGen::getFuncDefinitionStr(std::string& code, drgn_type* type,
     funcName = "getSizeTypeConcrete";
   }
 
-  code +=
-      "void " + funcName + "(const " + typeName + "& t, size_t& returnArg) {\n";
+  auto typeStaticType = getFuncDefTreeBuilderType(type, typeName);
+
+  code += (boost::format(R"(
+template <typename DB>
+struct TypeHandler<DB, %1%> {
+  using type = %3%;
+
+  static StaticTypes::Unit<DB> %2%(
+    const %1% &t,
+    typename TypeHandler<DB, %1%>::type returnArg) {
+)") % typeName %
+           funcName % typeStaticType)
+              .str();
 
   std::unordered_map<std::string, int> memberNames;
   getFuncDefClassMembers(code, type, memberNames);
 
-  code += "}\n";
+  code += "  }\n";
 
   if (isDynamic(type)) {
     enumerateDescendants(type, type);
@@ -1810,8 +1883,10 @@ void OICodeGen::getFuncDefinitionStr(std::string& code, drgn_type* type,
               "& t, size_t& returnArg);\n";
     }
 
-    code += std::string("void getSizeType(const ") + typeName +
-            std::string("& t, size_t& returnArg) {\n");
+    code += "template <typename DB>\n";
+    code += std::string("StaticTypes::Unit<DB> getSizeType(const ") + typeName +
+            std::string("& t, typename TypeHandler<" + typeName +
+                        ">::type returnArg) {\n");
     // The Itanium C++ ABI defines that the vptr must appear at the zero-offset
     // position in any class in which they are present.
     code += "  auto *vptr = *reinterpret_cast<uintptr_t * const *>(&t);\n";
@@ -1846,6 +1921,8 @@ void OICodeGen::getFuncDefinitionStr(std::string& code, drgn_type* type,
     code += "  getSizeTypeConcrete(t, returnArg);\n";
     code += "}\n";
   }
+
+  code += "\n};";
 }
 
 std::string OICodeGen::templateTransformType(const std::string& typeName) {
@@ -3231,6 +3308,7 @@ bool OICodeGen::generateJitCode(std::string& code) {
   std::string functionsCode;
   functionsCode.append("namespace OIInternal {\nnamespace {\n");
   functionsCode.append("// functions -----\n");
+  funcGen.DeclareBasicTypeHandlers(functionsCode);
   if (!funcGen.DeclareGetSizeFuncs(functionsCode, containerTypesFuncDef,
                                    config.chaseRawPointers)) {
     LOG(ERROR) << "declaring get size for containers failed";
@@ -3244,18 +3322,6 @@ bool OICodeGen::generateJitCode(std::string& code) {
 
     void getSizeType(const void *s_ptr, size_t& returnArg);
     )");
-  }
-
-  for (auto& e : structDefType) {
-    if (drgn_type_kind(e) != DRGN_TYPE_UNION) {
-      auto typeName = getNameForType(e);
-
-      if (!typeName.has_value()) {
-        return false;
-      }
-
-      funcGen.DeclareGetSize(functionsCode, *typeName);
-    }
   }
 
   if (config.useDataSegment || config.chaseRawPointers) {
@@ -3273,28 +3339,6 @@ bool OICodeGen::generateJitCode(std::string& code) {
                                   config.chaseRawPointers)) {
     LOG(ERROR) << "defining get size for containers failed";
     return false;
-  }
-
-  if (config.chaseRawPointers) {
-    functionsCode.append(R"(
-    template<typename T>
-    void getSizeType(const T* s_ptr, size_t& returnArg)
-    {
-      JLOG("ptr val @");
-      JLOGPTR(s_ptr);
-      StoreData((uintptr_t)(s_ptr), returnArg);
-      if (s_ptr && pointers.add((uintptr_t)s_ptr)) {
-          getSizeType(*(s_ptr), returnArg);
-      }
-    }
-
-    void getSizeType(const void *s_ptr, size_t& returnArg)
-    {
-      JLOG("void ptr @");
-      JLOGPTR(s_ptr);
-      StoreData((uintptr_t)(s_ptr), returnArg);
-    }
-    )");
   }
 
   for (auto& e : structDefType) {
@@ -3364,7 +3408,8 @@ bool OICodeGen::generateJitCode(std::string& code) {
       if (rootTypeStr.starts_with("unique_ptr") ||
           rootTypeStr.starts_with("LowPtr") ||
           rootTypeStr.starts_with("shared_ptr")) {
-        funcGen.DefineTopLevelGetSizeSmartPtr(functionsCode, rawTypeName);
+        // funcGen.DefineTopLevelGetSizeSmartPtr(functionsCode, rawTypeName);
+        funcGen.DefineTopLevelGetSizeRef(functionsCode, rawTypeName);
       } else {
         funcGen.DefineTopLevelGetSizeRef(functionsCode, rawTypeName);
       }

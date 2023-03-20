@@ -28,6 +28,7 @@ const char* containerTypeEnumToStr(ContainerTypeEnum ty);
 
 struct ContainerInfo {
   struct Codegen {
+    std::string outputType;
     std::string decl;
     std::string func;
   };

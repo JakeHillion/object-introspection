@@ -14,6 +14,9 @@ R"(
 #include <cstdint>
 
 #include <utility>
+#include <variant>
+#include <functional>
+#include <type_traits>
 #include <unistd.h>
 
 // clang-format on
@@ -21,7 +24,7 @@ R"(
 #define C10_USING_CUSTOM_GENERATED_MACROS
 
 // These globals are set by oid, see end of OIDebugger::compileCode()
-extern uintptr_t dataBase;
+extern uint8_t* dataBase;
 extern size_t dataSize;
 extern uintptr_t cookieValue;
 extern int logFile;
@@ -153,5 +156,186 @@ struct alignas(align) DummySizedOperator {
 template <>
 struct DummySizedOperator<0> {
 };
+
+namespace ObjectIntrospection {
+namespace DataBuffer {
+
+class DataBuffer {
+  protected:
+    void write_byte(uint8_t);
+};
+
+class DataSegment: public DataBuffer {
+  public:
+    DataSegment(size_t offset) : buf(dataBase + offset) {}
+
+    void write_byte(uint8_t byte) {
+      if (buf > (dataBase + dataSize * 8)) {
+        // TODO: fail
+      }
+      *buf = byte;
+      buf++;
+    }
+
+    // TODO: REMOVE ME
+    uint8_t* bust() {
+      return buf;
+    }
+
+  private:
+    uint8_t* buf;
+};
+
+} // namespace DataBuffer
+
+namespace RuntimeTypes {
+class Unit {};
+
+class VarInt {
+
+};
+
+using Dynamic = std::variant<
+  std::reference_wrapper<const Unit>,
+  std::reference_wrapper<const VarInt>>;
+
+} // namespace RuntimeTypes
+
+namespace StaticTypes {
+
+template <typename DataBuffer>
+class Unit {
+  public:
+    Unit(DataBuffer db) : _buf(db) {}
+
+    static RuntimeTypes::Dynamic describe() {
+      static auto singleton = RuntimeTypes::Unit();
+      return RuntimeTypes::Dynamic(singleton);
+    }
+
+    // TODO: REMOVE ME
+    uint8_t* bust() {
+      return _buf.bust();
+    }
+
+    template <typename T>
+    T cast() {
+      return T(_buf);
+    }
+
+    Unit<DataBuffer>
+    delegate(std::function<Unit<DataBuffer>(Unit<DataBuffer>)> cb) {
+      return cb(*this);
+    }
+
+  private:
+    DataBuffer _buf;
+};
+
+template <typename DataBuffer>
+class VarInt {
+  public:
+    VarInt(DataBuffer db) : _buf(db) {}
+
+    static RuntimeTypes::Dynamic describe() {
+      static auto singleton = RuntimeTypes::VarInt();
+      return RuntimeTypes::Dynamic(singleton);
+    }
+
+    Unit<DataBuffer> write(uint64_t val) {
+      while (val >= 128) {
+        _buf.write_byte(0x80 | (val & 0x7f));
+        val >>= 7;
+      }
+      _buf.write_byte(uint8_t(val));
+      return Unit<DataBuffer>(_buf);
+    }
+
+  private:
+    DataBuffer _buf;
+};
+
+template <typename DataBuffer, typename T1, typename T2>
+class Pair {
+  public:
+    Pair(DataBuffer db) : _buf(db) {}
+
+    template <class U>
+    T2 write(U val) {
+      Unit<DataBuffer> second = T1(_buf).write(val);
+      return second.template cast<T2>();
+    }
+
+    T2 delegate(std::function<Unit<DataBuffer>(T1)> cb) {
+      T1 first = T1(_buf);
+      Unit<DataBuffer> second = cb(first);
+      return second.template cast<T2>();
+    }
+
+  private:
+    DataBuffer _buf;
+};
+
+template <typename DataBuffer, typename... Types>
+class Sum {
+  private:
+    template <size_t I, typename... Elements>
+    struct Selector;
+
+    template <size_t I, typename Head, typename... Tail>
+    struct Selector<I, Head, Tail...> {
+      using type = typename std::conditional<I == 0, Head, typename Selector<I - 1, Tail...>::type>::type;
+    };
+
+    template<size_t I>
+    struct Selector<I> {
+      using type = int;
+    };
+
+  public:
+    Sum(DataBuffer db) : _buf(db) {}
+
+    template <size_t I = 0>
+    typename Selector<I, Types...>::type write() {
+      Pair<DataBuffer, VarInt<DataBuffer>, typename Selector<I, Types...>::type> buf(_buf);
+      return buf.write(I);
+    }
+
+    template <size_t I = 0>
+    Unit<DataBuffer> delegate(std::function<Unit<DataBuffer>(typename Selector<I, Types...>::type)> cb) {
+      auto tail = write<I>();
+      return cb(tail);
+    }
+
+  private:
+    DataBuffer _buf;
+};
+
+template <typename DataBuffer, typename T>
+class ListContents {
+  public:
+    ListContents(DataBuffer db) : _buf(db) {}
+
+    ListContents<DataBuffer, T> delegate(std::function<Unit<DataBuffer>(T)> cb) {
+      T head = T(_buf);
+      Unit<DataBuffer> tail = cb(head);
+      return tail.template cast<ListContents<DataBuffer, T>>();
+    }
+
+    Unit<DataBuffer> finish() {
+      return { _buf };
+    }
+
+  private:
+    DataBuffer _buf;
+};
+
+template <typename DataBuffer, typename T>
+using List = Pair<DataBuffer, VarInt<DataBuffer>, ListContents<DataBuffer, T>>;
+
+} // namespace StaticTypes
+} // namespace ObjectIntrospection
+
+using namespace ObjectIntrospection;
 
 )"

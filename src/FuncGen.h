@@ -37,6 +37,8 @@ class FuncGen {
   static void DeclareEncodeDataSize(std::string& testCode);
   static void DefineEncodeDataSize(std::string& testCode);
 
+  static void DeclareBasicTypeHandlers(std::string& testCode);
+
   bool DeclareGetSizeFuncs(std::string& testCode,
                            const ContainerInfoRefSet& containerInfo,
                            bool chaseRawPointers);
@@ -45,8 +47,6 @@ class FuncGen {
                           bool chaseRawPointers);
 
   static void DeclareGetContainer(std::string& testCode);
-
-  static void DeclareGetSize(std::string& testCode, const std::string& type);
 
   static void DeclareTopLevelGetSize(std::string& testCode,
                                      const std::string& type);
@@ -59,9 +59,6 @@ class FuncGen {
 
   static void DefineTopLevelGetSizeRefRet(std::string& testCode,
                                           const std::string& type);
-
-  static void DefineTopLevelGetSizeSmartPtr(std::string& testCode,
-                                            const std::string& rawType);
 
   static void DefineGetSizeTypedValueFunc(std::string& testCode,
                                           const std::string& ctype);
