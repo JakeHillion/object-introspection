@@ -20,6 +20,7 @@
 #include <iostream>
 #include <sstream>
 
+#include "DotPrinter.h"
 #include "Printer.h"
 #include "TypeGraph.h"
 
@@ -42,9 +43,16 @@ void print(const TypeGraph& typeGraph) {
     return;
 
   std::stringstream out;
-  Printer printer{out, typeGraph.size()};
-  for (const auto& type : typeGraph.rootTypes()) {
-    printer.print(type);
+  // Printer printer{out, typeGraph.size()};
+  // for (const auto& type : typeGraph.rootTypes()) {
+  //   printer.print(type);
+  // }
+
+  {
+    DotPrinter dotPrinter{out};
+    for (const auto& type : typeGraph.rootTypes()) {
+      dotPrinter.print(type);
+    }
   }
 
   // Long strings will be truncated by glog, use std::cerr instead
