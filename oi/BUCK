@@ -1,0 +1,13 @@
+cxx_binary(
+  name = "oid",
+  srcs = [
+    "OID.cpp",
+    "OIDebugger.cpp",
+  ],
+  headers = [
+    "OIDebugger.h",
+    "Syscall.h",
+    "TrapInfo.h",
+  ], 
+)
+

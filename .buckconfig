@@ -1,0 +1,17 @@
+[repositories]
+root = .
+prelude = .buck/prelude
+shim = .buck/shim
+
+[repository_aliases]
+config = prelude
+ovr_config = prelude
+toolchains = shim
+fbcode = shim
+fbcode_macros = shim
+fbsource = shim
+buck = shim
+
+[parser]
+target_platform_detector_spec = target:root//...->prelude//platforms:default target:shim//...->prelude//platforms:default
+
