@@ -204,4 +204,9 @@ void NameGen::visit(CaptureKeys& c) {
   c.regenerateName();
 }
 
+void NameGen::visit(Incomplete& i) {
+  RecursiveVisitor::visit(i);
+  i.regenerateName();
+}
+
 }  // namespace oi::detail::type_graph

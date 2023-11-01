@@ -958,7 +958,7 @@ TEST(FlattenerTest, IncompleteParent) {
   test(Flattener::createPass(), R"(
 [0] Class: MyClass (size: 4)
       Parent (offset: 0)
-        Incomplete: [IncompleteParent]
+[1]     Incomplete: [IncompleteParent]
 )",
        R"(
 [0] Class: MyClass (size: 4)
