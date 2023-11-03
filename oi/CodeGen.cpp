@@ -834,8 +834,7 @@ void CodeGen::genClassTypeHandler(const Class& c, std::string& code) {
 
 namespace {
 
-void genContainerTypeHandler(FeatureSet features,
-                             std::unordered_set<const ContainerInfo*>& used,
+void genContainerTypeHandler(std::unordered_set<const ContainerInfo*>& used,
                              const ContainerInfo& c,
                              std::span<const TemplateParam> templateParams,
                              std::string& code) {
@@ -1068,8 +1067,8 @@ constexpr inst::Field make_field(std::string_view name) {
       TemplateParam{typeGraph.makeType<Primitive>(Primitive::Kind::UInt64),
                     "0"},
   };
-  genContainerTypeHandler(features, used, FuncGen::GetOiArrayContainerInfo(),
-                          arrayParams, code);
+  genContainerTypeHandler(used, FuncGen::GetOiArrayContainerInfo(), arrayParams,
+                          code);
 }
 
 }  // namespace
