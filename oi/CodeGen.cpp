@@ -1078,11 +1078,10 @@ void CodeGen::addTypeHandlers(const TypeGraph& typeGraph, std::string& code) {
     if (const auto* c = dynamic_cast<const Class*>(&t)) {
       genClassTypeHandler(*c, code);
     } else if (const auto* con = dynamic_cast<const Container*>(&t)) {
-      genContainerTypeHandler(config_.features, definedContainers_,
-                              con->containerInfo_, con->templateParams, code);
+      genContainerTypeHandler(definedContainers_, con->containerInfo_,
+                              con->templateParams, code);
     } else if (const auto* cap = dynamic_cast<const CaptureKeys*>(&t)) {
-      genContainerTypeHandler(config_.features, definedContainers_,
-                              cap->containerInfo(),
+      genContainerTypeHandler(definedContainers_, cap->containerInfo(),
                               cap->container().templateParams, code);
     }
   }
