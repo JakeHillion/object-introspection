@@ -173,12 +173,8 @@ std::pair<void*, const exporters::inst::Inst&> OILibraryImpl::compileCode() {
 namespace {
 std::map<Feature, bool> convertFeatures(std::unordered_set<oi::Feature> fs) {
   std::map<Feature, bool> out{
-      {Feature::TypeGraph, true},
-      {Feature::TypedDataSegment, true},
-      {Feature::TreeBuilderTypeChecking, true},
-      {Feature::TreeBuilderV2, true},
-      {Feature::Library, true},
-      {Feature::PackStructs, true},
+      {Feature::TypeGraph, true},      {Feature::TreeBuilderV2, true},
+      {Feature::Library, true},        {Feature::PackStructs, true},
       {Feature::PruneTypeGraph, true},
   };
 

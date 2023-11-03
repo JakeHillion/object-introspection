@@ -180,12 +180,8 @@ int OIGenerator::generate(fs::path& primaryObject, SymbolService& symbols) {
   auto oilTypes = findOilTypesAndNames(prog);
 
   std::map<Feature, bool> featuresMap = {
-      {Feature::TypeGraph, true},
-      {Feature::TypedDataSegment, true},
-      {Feature::TreeBuilderTypeChecking, true},
-      {Feature::TreeBuilderV2, true},
-      {Feature::Library, true},
-      {Feature::PackStructs, true},
+      {Feature::TypeGraph, true},      {Feature::TreeBuilderV2, true},
+      {Feature::Library, true},        {Feature::PackStructs, true},
       {Feature::PruneTypeGraph, true},
   };
 
