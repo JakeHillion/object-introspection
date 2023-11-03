@@ -117,17 +117,14 @@ void addIncludes(const TypeGraph& typeGraph,
                  FeatureSet features,
                  std::string& code) {
   std::set<std::string_view> includes{"cstddef"};
-  if (features[Feature::TypedDataSegment]) {
+  if (features[Feature::TreeBuilderV2]) {
+    code += "#define DEFINE_DESCRIBE 1\n";  // added before all includes
+
     includes.emplace("functional");
+    includes.emplace("oi/exporters/inst.h");
+    includes.emplace("oi/types/dy.h");
     includes.emplace("oi/types/st.h");
   }
-  if (features[Feature::TreeBuilderTypeChecking]) {
-    includes.emplace("oi/types/dy.h");
-
-    code += "#define DEFINE_DESCRIBE 1\n";  // added before all includes
-  }
-  if (features[Feature::TreeBuilderV2])
-    includes.emplace("oi/exporters/inst.h");
   if (features[Feature::Library]) {
     includes.emplace("vector");
     includes.emplace("oi/IntrospectionResult.h");
@@ -830,8 +827,7 @@ void CodeGen::genClassTypeHandler(const Class& c, std::string& code) {
   code += "  using type = ";
   genClassStaticType(c, code);
   code += ";\n";
-  if (config_.features[Feature::TreeBuilderV2])
-    genClassTreeBuilderInstructions(c, code);
+  genClassTreeBuilderInstructions(c, code);
   genClassTraversalFunction(c, code);
   code += "};\n";
 }
@@ -845,19 +841,6 @@ void genContainerTypeHandler(FeatureSet features,
                              std::string& code) {
   if (!used.insert(&c).second)
     return;
-
-  if (!features[Feature::TreeBuilderV2]) {
-    const auto& handler = c.codegen.handler;
-    if (handler.empty()) {
-      LOG(ERROR) << "`codegen.handler` must be specified for all containers "
-                    "under \"-ftyped-data-segment\", not specified for \"" +
-                        c.typeName + "\"";
-      throw std::runtime_error("missing `codegen.handler`");
-    }
-    auto fmt = boost::format(c.codegen.handler) % c.typeName;
-    code += fmt.str();
-    return;
-  }
 
   code += c.codegen.extra;
 
@@ -1216,14 +1199,14 @@ void CodeGen::generate(
   if (!config_.features[Feature::Library]) {
     FuncGen::DeclareExterns(code);
   }
-  if (!config_.features[Feature::TypedDataSegment]) {
+  if (!config_.features[Feature::TreeBuilderV2]) {
     defineMacros(code);
   }
   addIncludes(typeGraph, config_.features, code);
   defineInternalTypes(code);
   FuncGen::DefineJitLog(code, config_.features);
 
-  if (config_.features[Feature::TypedDataSegment]) {
+  if (config_.features[Feature::TreeBuilderV2]) {
     if (config_.features[Feature::Library]) {
       FuncGen::DefineBackInserterDataBuffer(code);
     } else {
@@ -1231,10 +1214,8 @@ void CodeGen::generate(
     }
     code += "using namespace oi;\n";
     code += "using namespace oi::detail;\n";
-    if (config_.features[Feature::TreeBuilderV2]) {
-      code += "using oi::exporters::ParsedData;\n";
-      code += "using namespace oi::exporters;\n";
-    }
+    code += "using oi::exporters::ParsedData;\n";
+    code += "using namespace oi::exporters;\n";
     code += "namespace OIInternal {\nnamespace {\n";
     FuncGen::DefineBasicTypeHandlers(code, config_.features);
     code += "} // namespace\n} // namespace OIInternal\n";
@@ -1254,7 +1235,7 @@ void CodeGen::generate(
    * process faster.
    */
   code += "namespace OIInternal {\nnamespace {\n";
-  if (!config_.features[Feature::TypedDataSegment]) {
+  if (!config_.features[Feature::TreeBuilderV2]) {
     FuncGen::DefineEncodeData(code);
     FuncGen::DefineEncodeDataSize(code);
     FuncGen::DefineStoreData(code);
@@ -1269,7 +1250,7 @@ void CodeGen::generate(
     genExclusiveSizes(typeGraph, code);
   }
 
-  if (config_.features[Feature::TypedDataSegment]) {
+  if (config_.features[Feature::TreeBuilderV2]) {
     addStandardTypeHandlers(typeGraph, config_.features, code);
     addTypeHandlers(typeGraph, code);
   } else {
@@ -1286,10 +1267,8 @@ void CodeGen::generate(
   code += "} // namespace\n} // namespace OIInternal\n";
 
   const auto typeName = SymbolService::getTypeName(drgnType);
-  if (config_.features[Feature::Library]) {
+  if (config_.features[Feature::TreeBuilderV2]) {
     FuncGen::DefineTopLevelIntrospect(code, typeName);
-  } else if (config_.features[Feature::TypedDataSegment]) {
-    FuncGen::DefineTopLevelGetSizeRefTyped(code, typeName, config_.features);
   } else {
     FuncGen::DefineTopLevelGetSizeRef(code, typeName, config_.features);
   }
@@ -1298,8 +1277,6 @@ void CodeGen::generate(
     FuncGen::DefineTreeBuilderInstructions(code, typeName,
                                            calculateExclusiveSize(rootType),
                                            enumerateTypeNames(rootType));
-  } else if (config_.features[Feature::TreeBuilderTypeChecking]) {
-    FuncGen::DefineOutputType(code, typeName);
   }
 
   if (!linkageName_.empty())
