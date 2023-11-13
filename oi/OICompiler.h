@@ -20,6 +20,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <range/v3/algorithm/starts_with.hpp>
 #include <ranges>
 #include <set>
 #include <span>
@@ -204,19 +205,10 @@ std::optional<std::vector<uintptr_t>> OICompiler::locateOpcodes(
 
   std::vector<uintptr_t> locs;
   while (auto inst = DG()) {
-    auto it = std::find_if(
-        std::begin(needles), std::end(needles), [&](const auto& needle) {
-          // std::ranges::starts_with(inst->opcodes, needle)
-          if (std::ranges::size(needle) > std::ranges::size(inst->opcodes))
-            return false;
-          auto it1 = std::ranges::begin(inst->opcodes);
-          auto it2 = std::ranges::begin(needle);
-          for (; it2 != std::ranges::end(needle); ++it1, ++it2) {
-            if (*it1 != *it2)
-              return false;
-          }
-          return true;
-        });
+    auto it = std::find_if(std::begin(needles), std::end(needles),
+                           [&](const auto& needle) {
+                             return ranges::starts_with(inst->opcodes, needle);
+                           });
 
     if (it != std::end(needles)) {
       locs.push_back(inst->offset);
