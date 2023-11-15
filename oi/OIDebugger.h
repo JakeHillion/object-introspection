@@ -20,7 +20,7 @@
 #include <filesystem>
 #include <fstream>
 
-#include "oi/OICache.h"
+#include "oi/Cache.h"
 #include "oi/OICodeGen.h"
 #include "oi/OICompiler.h"
 #include "oi/OIParser.h"
@@ -77,60 +77,15 @@ class OIDebugger {
     return oidShouldExit;
   };
 
-  void setCacheBasePath(std::filesystem::path basePath) {
-    if (std::filesystem::exists(basePath.parent_path()) &&
-        !std::filesystem::exists(basePath)) {
-      // Create cachedir if parent directory exists
-      // TODO if returning false here, throw an error
-      std::filesystem::create_directory(basePath);
-    }
-    cache.basePath = std::move(basePath);
-  }
-
-  void setCacheRemoteEnabled(bool upload, bool download) {
-    cache.enableUpload = upload;
-    cache.enableDownload = download;
-    cache.abortOnLoadFail = download && !upload;
-  }
-
-  bool validateCache() {
-    if ((cache.enableUpload || cache.enableDownload) && !cache.isEnabled()) {
-      LOG(ERROR) << "Cache download/upload option specified when cache is "
-                    "disabled - aborting!";
-      return false;
-    }
-    return true;
-  }
-
   void setHardDisableDrgn(bool val) {
     symbols->setHardDisableDrgn(val);
   }
   void setStrict(bool val) {
     treeBuilderConfig.strict = val;
   }
-
-  bool uploadCache() {
-    return std::all_of(
-        std::begin(pdata), std::end(pdata), [this](const auto& req) {
-          return std::all_of(
-              std::begin(req.args),
-              std::end(req.args),
-              [this, &req](const auto& arg) {
-                return cache.upload(irequest{req.type, req.func, arg});
-              });
-        });
+  void setCache(Cache cache) {
+    cache_ = std::move(cache);
   }
-  bool downloadCache() {
-    return std::all_of(
-        std::begin(pdata), std::end(pdata), [this](const auto& req) {
-          return std::all_of(
-              std::begin(req.args),
-              std::end(req.args),
-              [this, &req](const auto& arg) {
-                return cache.download(irequest{req.type, req.func, arg});
-              });
-        });
-  };
 
   std::pair<RootInfo, TypeHierarchy> getTreeBuilderTyping() {
     assert(pdata.numReqs() == 1);
@@ -179,7 +134,7 @@ class OIDebugger {
   const int replayInstSize = 512;
   bool trapsRemoved{false};
   std::shared_ptr<SymbolService> symbols;
-  OICache cache;
+  Cache cache_;
 
   /*
    * Map address of valid INT3 instruction to metadata for that interrupt.

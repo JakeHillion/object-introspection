@@ -44,6 +44,7 @@ extern "C" {
 
 #include <glog/logging.h>
 
+#include "oi/Cache.h"
 #include "oi/CodeGen.h"
 #include "oi/Config.h"
 #include "oi/ContainerInfo.h"
@@ -1886,8 +1887,7 @@ bool OIDebugger::removeTrap(pid_t pid, const trapInfo& t) {
 OIDebugger::OIDebugger(const OICodeGen::Config& genConfig,
                        OICompiler::Config ccConfig,
                        TreeBuilder::Config tbConfig)
-    : cache{genConfig},
-      compilerConfig{std::move(ccConfig)},
+    : compilerConfig{std::move(ccConfig)},
       generatorConfig{genConfig},
       treeBuilderConfig{std::move(tbConfig)} {
   debug = true;
@@ -1904,7 +1904,6 @@ OIDebugger::OIDebugger(pid_t pid,
   symbols = std::make_shared<SymbolService>(traceePid);
   setDataSegmentSize(dataSegSize);
   createSegmentConfigFile();
-  cache.symbols = symbols;
 }
 
 OIDebugger::OIDebugger(fs::path debugInfo,
@@ -1913,7 +1912,6 @@ OIDebugger::OIDebugger(fs::path debugInfo,
                        TreeBuilder::Config tbConfig)
     : OIDebugger(genConfig, std::move(ccConfig), std::move(tbConfig)) {
   symbols = std::make_shared<SymbolService>(std::move(debugInfo));
-  cache.symbols = symbols;
 }
 
 /*
@@ -2163,8 +2161,8 @@ bool OIDebugger::compileCode() {
   assert(pdata.numReqs() == 1);
   const auto& preq = pdata.getReq();
 
-  OICompiler compiler{symbols, compilerConfig};
-  std::set<fs::path> objectFiles{};
+  std::optional<OICompiler> compiler;
+  std::vector<std::vector<uint8_t>> objectContents;
 
   /*
    * Global probes don't have multiple arguments, but calling `getReqForArg(X)`
@@ -2176,106 +2174,89 @@ bool OIDebugger::compileCode() {
   for (size_t i = 0; i < argCount; i++) {
     const auto& req = preq.getReqForArg(i);
 
-    if (cache.isEnabled()) {
-      // try to download cache artifacts if present
-      if (!downloadCache()) {
-#if OI_PORTABILITY_META_INTERNAL()
-        // Send a request to the GOBS service
-        char buf[PATH_MAX];
-        const std::string procpath =
-            "/proc/" + std::to_string(traceePid) + "/exe";
-        size_t buf_size;
-        if ((buf_size = readlink(procpath.c_str(), buf, PATH_MAX)) == -1) {
-          LOG(ERROR)
-              << "Failed to get binary path for tracee, could not call GOBS: "
-              << strerror(errno);
-        } else {
-          LOG(INFO) << "Attempting to get cache request from gobs";
-          ObjectIntrospection::GobsService::requestCache(
-              procpath,
-              std::string(buf, buf_size),
-              req.toString(),
-              generatorConfig.toOptions());
-        }
-#endif
-        LOG(ERROR) << "No cache file found, exiting!";
-        return false;
-      }
+    cache::Source::Request cacheReq{
+        .features = generatorConfig.features,
+        .probe = req,
+        .traceePid = traceePid ? traceePid : -1,
+        .buildId = symbols->locateBuildID(),
+    };
 
-      if (req.type == "global") {
-        decltype(symbols->globalDescs) gds;
-        if (cache.load(req, OICache::Entity::GlobalDescs, gds)) {
-          symbols->globalDescs.merge(std::move(gds));
-        }
-      } else {
-        decltype(symbols->funcDescs) fds;
-        if (cache.load(req, OICache::Entity::FuncDescs, fds)) {
-          symbols->funcDescs.merge(std::move(fds));
-        }
+    cache::ObjectCode object;
+    cache::TypeHierarchy th;
+    cache::PaddingInfo pad;
+
+    bool skipCodeGen = cache_.read(cacheReq, object) &&
+                       cache_.read(cacheReq, th) && cache_.read(cacheReq, pad);
+
+    // Attempt to execute on a remote builder before building locally
+    if (!skipCodeGen) {
+      cache::Builder::Request builderReq{
+          .location = cacheReq,
+      };
+      switch (cache_.build(builderReq)) {
+        case cache::Builder::Response::Success:
+          LOG(INFO) << "remote builder success";
+          skipCodeGen = cache_.read(cacheReq, object) &&
+                        cache_.read(cacheReq, th) && cache_.read(cacheReq, pad);
+          break;
+        case cache::Builder::Response::Processing:
+          LOG(INFO) << "remote builder processing, please come back later";
+          return false;
+        case cache::Builder::Response::Failure:
+          break;  // proceed to local generation
       }
     }
 
-    auto sourcePath = cache.getPath(req, OICache::Entity::Source);
-    auto objectPath = cache.getPath(req, OICache::Entity::Object);
-    auto typeHierarchyPath = cache.getPath(req, OICache::Entity::TypeHierarchy);
-    auto paddingInfoPath = cache.getPath(req, OICache::Entity::PaddingInfo);
+    if (skipCodeGen) {
+      LOG(INFO)
+          << "Successfully loaded from the cache, skipping code generation.";
+      typeInfos.emplace(req, std::make_tuple(th.root, th.th, pad.info));
+      objectContents.emplace_back(std::move(object.code));
+      continue;
+    }
 
-    if (!sourcePath || !objectPath || !typeHierarchyPath || !paddingInfoPath) {
-      LOG(ERROR) << "Failed to get all cache paths, aborting!";
+    // 1. Code generate
+    // 2. Compile
+    // 3. Save into cache
+    VLOG(2) << "Compiling probe for '" << req.arg;
+
+    auto genCode = generateCode(req);
+    if (!genCode.has_value()) {
+      LOG(ERROR) << "Failed to generate code";
+      return false;
+    }
+    cache::SourceCode code{std::move(*genCode)};
+
+    if (!compiler.has_value())
+      compiler.emplace(symbols, compilerConfig);
+
+    fs::path sourcePath{};
+    if (!compiler->compile(code.code, sourcePath, object.code)) {
+      LOG(ERROR) << "Failed to compile code";
       return false;
     }
 
-    bool skipCodeGen = cache.isEnabled() && fs::exists(*objectPath) &&
-                       fs::exists(*typeHierarchyPath) &&
-                       fs::exists(*paddingInfoPath);
-    if (skipCodeGen) {
-      std::pair<RootInfo, TypeHierarchy> th;
-      skipCodeGen =
-          skipCodeGen && cache.load(req, OICache::Entity::TypeHierarchy, th);
+    bool cacheSuccess = true;
+    cacheSuccess &= cache_.write(cacheReq, code);
+    cacheSuccess &= cache_.write(cacheReq, object);
 
-      std::map<std::string, PaddingInfo> pad;
-      skipCodeGen =
-          skipCodeGen && cache.load(req, OICache::Entity::PaddingInfo, pad);
-
-      if (skipCodeGen) {
-        typeInfos.emplace(req, std::make_tuple(th.first, th.second, pad));
-      }
+    if (req.type == "global") {
+      cacheSuccess &=
+          cache_.write(cacheReq, cache::GlobalDescs(symbols->globalDescs));
+    } else {
+      cacheSuccess &=
+          cache_.write(cacheReq, cache::FuncDescs(symbols->funcDescs));
     }
 
-    if (!skipCodeGen) {
-      VLOG(2) << "Compiling probe for '" << req.arg
-              << "' into: " << *objectPath;
+    const auto& [rootType, typeHierarchy, paddingInfo] = typeInfos.at(req);
+    cacheSuccess &=
+        cache_.write(cacheReq, cache::TypeHierarchy(rootType, typeHierarchy));
+    cacheSuccess &= cache_.write(cacheReq, cache::PaddingInfo(paddingInfo));
 
-      auto code = generateCode(req);
-      if (!code.has_value()) {
-        LOG(ERROR) << "Failed to generate code";
-        return false;
-      }
+    if (!cacheSuccess)
+      LOG(ERROR) << "Failed to write all objects to cache";
 
-      bool doCompile = !cache.isEnabled() || !fs::exists(*objectPath);
-      if (doCompile) {
-        if (!compiler.compile(*code, *sourcePath, *objectPath)) {
-          LOG(ERROR) << "Failed to compile code";
-          return false;
-        }
-      }
-    }
-
-    if (cache.isEnabled() && !skipCodeGen) {
-      if (req.type == "global") {
-        cache.store(req, OICache::Entity::GlobalDescs, symbols->globalDescs);
-      } else {
-        cache.store(req, OICache::Entity::FuncDescs, symbols->funcDescs);
-      }
-
-      const auto& [rootType, typeHierarchy, paddingInfo] = typeInfos.at(req);
-      cache.store(req,
-                  OICache::Entity::TypeHierarchy,
-                  std::make_pair(rootType, typeHierarchy));
-      cache.store(req, OICache::Entity::PaddingInfo, paddingInfo);
-    }
-
-    objectFiles.insert(*objectPath);
+    objectContents.emplace_back(std::move(object.code));
   }
 
   if (traceePid) {  // we attach to a process
@@ -2287,11 +2268,10 @@ bool OIDebugger::compileCode() {
     };
 
     VLOG(2) << "Relocating...";
-    for (const auto& o : objectFiles) {
-      VLOG(2) << "  * " << o;
-    }
-    auto relocRes = compiler.applyRelocs(
-        segConfig.jitCodeStart, objectFiles, syntheticSymbols);
+    if (!compiler.has_value())
+      compiler.emplace(symbols, compilerConfig);
+    auto relocRes = compiler->applyRelocs(segConfig.jitCodeStart,
+                                          objectContents, syntheticSymbols);
     if (!relocRes.has_value()) {
       LOG(ERROR) << "Failed to relocate object code";
       return false;
@@ -2948,10 +2928,6 @@ std::optional<std::string> OIDebugger::generateCode(const irequest& req) {
   if (generatorConfig.features[Feature::TypeGraph]) {
     CodeGen codegen2{generatorConfig, *symbols};
     codegen2.codegenFromDrgn(root->type.type, code);
-  }
-
-  if (auto sourcePath = cache.getPath(req, OICache::Entity::Source)) {
-    std::ofstream(*sourcePath) << code;
   }
 
   if (!customCodeFile.empty()) {

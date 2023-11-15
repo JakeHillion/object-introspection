@@ -272,7 +272,7 @@ ADD_FLEX_BISON_DEPENDENCY(Lexer Parser)
 
 add_library(oid_parser STATIC ${BISON_Parser_OUTPUTS} ${FLEX_Lexer_OUTPUTS})
 target_compile_options(oid_parser PRIVATE "-w") # Disable warnings for generated code
-target_link_libraries(oid_parser glog::glog)
+target_link_libraries(oid_parser glog::glog folly_headers)
 
 ### Core OI
 
@@ -283,7 +283,6 @@ add_library(oicore
   oi/Config.cpp
   oi/Descs.cpp
   oi/Metrics.cpp
-  oi/OICache.cpp
   oi/OICompiler.cpp
   oi/PaddingHunter.cpp
   oi/Serialize.cpp
@@ -295,7 +294,9 @@ target_include_directories(oicore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 llvm_map_components_to_libnames(llvm_libs core native mcjit x86disassembler)
 target_link_libraries(oicore
+  cache
   codegen
+  memory_file
 
   ${Boost_LIBRARIES}
   Boost::headers

@@ -132,12 +132,12 @@ class OICompiler {
    * Compile the given @param code and write the result in @param objectPath.
    *
    * @param code the C++ source code to compile
-   * @param sourcePath path/name of the code to compile (not used)
-   * @param objectPath path where to write the resulting Object file
+   * @param sourcePath path/name of the code to compile for debug info.
+   * @param objectBuf memory location to store the resultant code.
    *
    * @return true if the compilation succeeded, false otherwise.
    */
-  bool compile(const std::string&, const fs::path&, const fs::path&);
+  bool compile(const std::string&, const fs::path&, std::vector<uint8_t>&);
 
   /**
    * Load the @param objectFiles in memory and apply relocation at
@@ -158,7 +158,7 @@ class OICompiler {
    */
   std::optional<RelocResult> applyRelocs(
       uintptr_t,
-      const std::set<fs::path>&,
+      const std::vector<std::vector<uint8_t>>&,
       const std::unordered_map<std::string, uintptr_t>&);
 
   /**

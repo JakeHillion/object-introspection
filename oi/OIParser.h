@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 #pragma once
+
+#include <folly/hash/Hash.h>
+
 #include <cassert>
 #include <list>
 #include <memory>
@@ -41,8 +44,7 @@ namespace std {
 template <>
 struct hash<irequest> {
   std::size_t operator()(const irequest& req) const noexcept {
-    auto h = hash<std::string>();
-    return h(req.type) ^ h(req.func) ^ h(req.arg);
+    return folly::hash::hash_combine(req.type, req.func, req.arg);
   }
 };
 

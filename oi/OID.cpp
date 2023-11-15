@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include <folly/init/Init.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
@@ -39,10 +40,9 @@ extern "C" {
 #include "oi/Portability.h"
 #include "oi/TimeUtils.h"
 #include "oi/TreeBuilder.h"
-
-#if OI_PORTABILITY_META_INTERNAL()
-#include <folly/init/Init.h>
-#endif
+#include "oi/cache/GobsBuilder.h"
+#include "oi/cache/LocalCache.h"
+#include "oi/cache/ManifoldCache.h"
 
 namespace oi::detail {
 
@@ -334,15 +334,21 @@ static ExitStatus::ExitStatus runScript(
   }
   weak_oid = oid;  // set the weak_ptr for signal handlers
 
+  Cache cache;
   if (!oidConfig.cacheBasePath.empty()) {
-    oid->setCacheBasePath(oidConfig.cacheBasePath);
+    cache.registerSource(
+        std::make_unique<cache::LocalCache>(oidConfig.cacheBasePath));
   }
+  if constexpr (kIsMetaInternal) {
+    auto manifold = std::make_unique<cache::ManifoldCache>();
+    manifold->setReadable(oidConfig.remoteCacheDownload);
+    manifold->setWriteable(oidConfig.remoteCacheUpload);
+    cache.registerSource(std::move(manifold));
 
-  oid->setCacheRemoteEnabled(oidConfig.cacheRemoteUpload,
-                             oidConfig.cacheRemoteDownload);
-  if (!oid->validateCache()) {
-    return ExitStatus::UsageError;
+    cache.registerBuilder(std::make_unique<cache::GobsBuilder>());
   }
+  oid->setCache(std::move(cache));
+
   oid->setCustomCodeFile(oidConfig.customCodeFile);
   oid->setHardDisableDrgn(oidConfig.hardDisableDrgn);
   oid->setStrict(oidConfig.strict);
@@ -404,8 +410,7 @@ static ExitStatus::ExitStatus runScript(
   }
 
   VLOG(1) << "init took " << std::dec << time_ns(time_hr::now() - initStart)
-          << " nsecs\n"
-          << "Compilation Started";
+          << " nsecs\n";
 
   auto compileStart = time_hr::now();
 
@@ -489,11 +494,11 @@ static ExitStatus::ExitStatus runScript(
     }
   }
 
-  // Upload cache artifacts if present
-  if (!oid->uploadCache()) {
-    LOG(ERROR) << "cache upload requested and failed";
-    return ExitStatus::CacheUploadError;
-  }
+  // TODO: Upload cache artifacts if present
+  // if (!oid->uploadCache()) {
+  //   LOG(ERROR) << "cache upload requested and failed";
+  //   return ExitStatus::CacheUploadError;
+  // }
 
   std::cout << "SUCCESS " << fileName << std::endl;
   VLOG(1) << "Entire process took " << time_ns(time_hr::now() - progStart)
@@ -524,14 +529,14 @@ int main(int argc, char* argv[]) {
 
   metrics::Tracing _("main");
 
-#if OI_PORTABILITY_META_INTERNAL()
-  folly::InitOptions init;
-  init.useGFlags(false);
-  init.removeFlags(false);
-  folly::init(&argc, &argv, init);
-#else
-  google::InitGoogleLogging(argv[0]);
-#endif
+  if constexpr (kIsMetaInternal) {
+    folly::InitOptions init;
+    init.useGFlags(false);
+    init.removeFlags(false);
+    folly::init(&argc, &argv, init);
+  } else {
+    google::InitGoogleLogging(argv[0]);
+  }
   google::SetStderrLogging(google::WARNING);
 
   int c = 0;
@@ -555,7 +560,6 @@ int main(int argc, char* argv[]) {
           // change default settings for prod
           oidConfig.hardDisableDrgn = true;
           oidConfig.cacheRemoteDownload = true;
-          oidConfig.cacheBasePath = "/tmp/oid-cache";
           features[Feature::ChaseRawPointers] = true;
         } else if (strcmp("strict", optarg) == 0) {
           oidConfig.strict = true;

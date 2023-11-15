@@ -41,9 +41,13 @@
 #include <array>
 #include <boost/range/combine.hpp>
 #include <boost/scope_exit.hpp>
+#include <fstream>
+#include <iterator>
+#include <span>
 
 #include "oi/Headers.h"
 #include "oi/Metrics.h"
+#include "oi/support/MemoryFile.h"
 
 extern "C" {
 #include <llvm-c/Disassembler.h>
@@ -474,7 +478,7 @@ static void debugDisAsm(
 
 bool OICompiler::compile(const std::string& code,
                          const fs::path& sourcePath,
-                         const fs::path& objectPath) {
+                         std::vector<uint8_t>& objectBuf) {
   metrics::Tracing _("compile");
 
   /*
@@ -507,7 +511,8 @@ bool OICompiler::compile(const std::string& code,
 
   compInv->getFrontendOpts().Inputs.push_back(
       FrontendInputFile(sourcePath.string(), InputKind{Language::CXX}));
-  compInv->getFrontendOpts().OutputFile = objectPath.string();
+  MemoryFile fileBuf{"out.o"};
+  compInv->getFrontendOpts().OutputFile = fileBuf.path().string();
   compInv->getFrontendOpts().ProgramAction = clang::frontend::EmitObj;
 
   auto& headerSearchOptions = compInv->getHeaderSearchOpts();
@@ -561,7 +566,6 @@ bool OICompiler::compile(const std::string& code,
     }
   }
 
-  compInv->getFrontendOpts().OutputFile = objectPath;
   compInv->getTargetOpts().Triple =
       llvm::Triple::normalize(llvm::sys::getProcessTriple());
   if (config.usePIC) {
@@ -614,12 +618,15 @@ bool OICompiler::compile(const std::string& code,
   }
   */
 
+  std::ifstream ifs{fileBuf.path().string(), std::ios::binary};
+  objectBuf = std::vector<uint8_t>(std::istreambuf_iterator<char>(ifs),
+                                   std::istreambuf_iterator<char>());
   return true;
 }
 
 std::optional<OICompiler::RelocResult> OICompiler::applyRelocs(
     uintptr_t baseRelocAddress,
-    const std::set<fs::path>& objectFiles,
+    const std::vector<std::vector<uint8_t>>& objectFiles,
     const std::unordered_map<std::string, uintptr_t>& syntheticSymbols) {
   metrics::Tracing relocationTracing("relocation");
 
@@ -627,16 +634,19 @@ std::optional<OICompiler::RelocResult> OICompiler::applyRelocs(
   RuntimeDyld dyld(*memMgr, *memMgr);
 
   /* Load all the object files into the MemoryManager */
-  for (const auto& objPath : objectFiles) {
-    VLOG(1) << "Loading object file " << objPath;
-    auto objFile = ObjectFile::createObjectFile(objPath.c_str());
+  for (const auto& objContent : objectFiles) {
+    VLOG(1) << "Loading object content from memory";
+    llvm::MemoryBufferRef objBuf{
+        llvm::StringRef((const char*)objContent.data(), objContent.size()),
+        "test.o"};
+    auto objFile = ObjectFile::createObjectFile(objBuf);
     if (!objFile) {
-      raw_os_ostream(LOG(ERROR)) << "Failed to load object file " << objPath
-                                 << ": " << objFile.takeError();
+      raw_os_ostream(LOG(ERROR))
+          << "Failed to load object file:" << objFile.takeError();
       return std::nullopt;
     }
 
-    dyld.loadObject(*objFile->getBinary());
+    dyld.loadObject(**objFile);
     if (dyld.hasError()) {
       LOG(ERROR) << "load object failed: " << dyld.getErrorString().data();
       return std::nullopt;

@@ -61,6 +61,8 @@ class EnumBitset {
 
  private:
   BitsetType bitset;
+
+  friend struct std::hash<EnumBitset<T, N>>;
 };
 
 template <typename T, size_t N>
@@ -70,3 +72,14 @@ EnumBitset<T, N> operator&(const EnumBitset<T, N>& lhs,
   out &= rhs;
   return out;
 }
+
+namespace std {
+
+template <typename T, size_t N>
+struct hash<EnumBitset<T, N>> {
+  size_t operator()(const EnumBitset<T, N>& bs) const {
+    return hash<bitset<N>>{}(bs.bitset);
+  }
+};
+
+}  // namespace std

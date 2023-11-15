@@ -207,6 +207,7 @@ OidProc OidIntegration::runOidOnProcess(OidOpts opts,
       "--dump-json"s,
       "--script-source"s, opts.scriptSource,
       "--mode=strict"s,
+      "--cache-path=."s,
   };
   // clang-format on
 

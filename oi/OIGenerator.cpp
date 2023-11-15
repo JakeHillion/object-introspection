@@ -153,14 +153,18 @@ fs::path OIGenerator::generateForType(const OICodeGen::Config& generatorConfig,
 
   OICompiler compiler{{}, compilerConfig};
 
+  std::vector<uint8_t> objectCode;
+  if (!compiler.compile(code, sourcePath, objectCode)) {
+    return {};
+  }
   // TODO: Revert to outputPath and remove printing when typegraph is done.
   fs::path tmpObject = outputPath;
   tmpObject.replace_extension(
       "." + std::to_string(std::hash<std::string>{}(linkageName)) + ".o");
+  std::ofstream objectFile{tmpObject, std::ios::out | std::ios::binary};
+  objectFile.write(reinterpret_cast<const char*>(objectCode.data()),
+                   objectCode.size());
 
-  if (!compiler.compile(code, sourcePath, tmpObject)) {
-    return {};
-  }
   return tmpObject;
 }
 

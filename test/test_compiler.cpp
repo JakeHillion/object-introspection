@@ -43,11 +43,11 @@ TEST(CompilerTest, CompileAndRelocate) {
   EXPECT_NE(mkdtemp(const_cast<char*>(tmpdir.c_str())), nullptr);
 
   auto sourcePath = tmpdir / "src.cpp";
-  auto objectPath = tmpdir / "obj.o";
+  std::vector<uint8_t> objectContent;
 
   OICompiler compiler{symbols, {}};
 
-  EXPECT_TRUE(compiler.compile(code, sourcePath, objectPath));
+  EXPECT_TRUE(compiler.compile(code, sourcePath, objectContent));
 
   const size_t relocSlabSize = 4096;
   void* relocSlab = mmap(nullptr,
@@ -59,7 +59,7 @@ TEST(CompilerTest, CompileAndRelocate) {
   EXPECT_NE(relocSlab, nullptr);
 
   auto relocResult =
-      compiler.applyRelocs((uintptr_t)relocSlab, {objectPath}, {});
+      compiler.applyRelocs((uintptr_t)relocSlab, {objectContent}, {});
   EXPECT_TRUE(relocResult.has_value());
 
   auto& [_, segs, jitSymbols] = relocResult.value();
@@ -121,14 +121,14 @@ TEST(CompilerTest, CompileAndRelocateMultipleObjs) {
   EXPECT_NE(mkdtemp(const_cast<char*>(tmpdir.c_str())), nullptr);
 
   auto sourceXPath = tmpdir / "srcX.cpp";
-  auto objectXPath = tmpdir / "objX.o";
+  std::vector<uint8_t> objectXContent;
 
   auto sourceYPath = tmpdir / "srcY.cpp";
-  auto objectYPath = tmpdir / "objY.o";
+  std::vector<uint8_t> objectYContent;
 
   OICompiler compiler{symbols, {}};
-  EXPECT_TRUE(compiler.compile(codeX, sourceXPath, objectXPath));
-  EXPECT_TRUE(compiler.compile(codeY, sourceYPath, objectYPath));
+  EXPECT_TRUE(compiler.compile(codeX, sourceXPath, objectXContent));
+  EXPECT_TRUE(compiler.compile(codeY, sourceYPath, objectYContent));
 
   const size_t relocSlabSize = 8192;
   void* relocSlab = mmap(nullptr,
@@ -139,8 +139,8 @@ TEST(CompilerTest, CompileAndRelocateMultipleObjs) {
                          0);
   EXPECT_NE(relocSlab, nullptr);
 
-  auto relocResult = compiler.applyRelocs(
-      (uintptr_t)relocSlab, {objectXPath, objectYPath}, {});
+  auto relocResult = compiler.applyRelocs((uintptr_t)relocSlab,
+                                          {objectXContent, objectYContent}, {});
   EXPECT_TRUE(relocResult.has_value());
 
   auto& [_, segs, jitSymbols] = relocResult.value();

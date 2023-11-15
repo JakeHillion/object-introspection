@@ -55,23 +55,26 @@ DEFINE_TYPE_VERSION(TypeHierarchy, 384, 7)
 
 namespace boost::serialization {
 
-#define DECL_SERIALIZE(Type) \
-  template <class Archive>   \
-  void serialize(Archive&, Type&, const unsigned int)
+template <class Archive>
+void serialize(Archive&, PaddingInfo&, unsigned int);
 
-DECL_SERIALIZE(PaddingInfo);
+template <class Archive>
+void serialize(Archive&, FuncDesc::Arg&, unsigned int);
+template <class Archive>
+void serialize(Archive&, FuncDesc&, unsigned int);
+template <class Archive>
+void serialize(Archive&, GlobalDesc&, unsigned int);
 
-DECL_SERIALIZE(FuncDesc::Arg);
-DECL_SERIALIZE(FuncDesc);
-DECL_SERIALIZE(GlobalDesc);
+template <class Archive>
+void serialize(Archive&, drgn_type&, unsigned int);
+template <class Archive>
+void serialize(Archive&, drgn_qualified_type&, unsigned int);
+template <class Archive>
+void serialize(Archive&, RootInfo&, unsigned int);
 
-DECL_SERIALIZE(struct drgn_type);
-DECL_SERIALIZE(struct drgn_qualified_type);
-DECL_SERIALIZE(RootInfo);
-
-DECL_SERIALIZE(DrgnClassMemberInfo);
-DECL_SERIALIZE(TypeHierarchy);
-
-#undef DECL_SERIALIZE
+template <class Archive>
+void serialize(Archive&, DrgnClassMemberInfo&, unsigned int);
+template <class Archive>
+void serialize(Archive&, TypeHierarchy&, unsigned int);
 
 }  // namespace boost::serialization

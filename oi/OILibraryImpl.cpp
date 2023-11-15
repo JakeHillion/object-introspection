@@ -61,24 +61,6 @@ OILibraryImpl::LocalTextSegment::~LocalTextSegment() {
       << "segment unmap failed";
 }
 
-OILibraryImpl::MemoryFile::MemoryFile(const char* name) {
-  fd_ = memfd_create(name, 0);
-  if (fd_ == -1)
-    throw std::runtime_error(std::string("memfd creation failed: ") +
-                             std::strerror(errno));
-}
-
-OILibraryImpl::MemoryFile::~MemoryFile() {
-  if (fd_ == -1)
-    return;
-
-  PLOG_IF(ERROR, close(fd_) == -1) << "memfd close failed";
-}
-
-std::filesystem::path OILibraryImpl::MemoryFile::path() {
-  return {(boost::format("/dev/fd/%1%") % fd_).str()};
-}
-
 OILibraryImpl::OILibraryImpl(void* atomicHole,
                              std::unordered_set<oi::Feature> fs,
                              GeneratorOptions opts)
@@ -132,13 +114,13 @@ std::pair<void*, const exporters::inst::Inst&> OILibraryImpl::compileCode() {
     outputFile << code;
   }
 
-  auto object = MemoryFile("oil_object_code");
   OICompiler compiler{symbols, compilerConfig_};
-  if (!compiler.compile(code, sourcePath, object.path()))
+  std::vector<uint8_t> object;
+  if (!compiler.compile(code, sourcePath, object))
     throw std::runtime_error("oil jit compilation failed!");
 
   auto relocRes = compiler.applyRelocs(
-      reinterpret_cast<uint64_t>(textSeg.data().data()), {object.path()}, {});
+      reinterpret_cast<uint64_t>(textSeg.data().data()), {object}, {});
   if (!relocRes)
     throw std::runtime_error("oil jit relocation failed!");
 

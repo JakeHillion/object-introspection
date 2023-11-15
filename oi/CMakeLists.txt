@@ -21,10 +21,16 @@ target_link_libraries(symbol_service
 
   Boost::headers
   ${Boost_LIBRARIES}
+  folly_headers
   glog::glog
 
   dw
 )
+
+add_library(memory_file
+  support/MemoryFile.cpp
+)
+target_link_libraries(memory_file glog::glog Boost::headers)
 
 add_library(features Features.cpp)
 target_link_libraries(features glog::glog)
@@ -53,6 +59,17 @@ target_link_libraries(codegen
   ${Boost_LIBRARIES}
   folly_headers
   glog::glog
+)
+
+add_library(cache
+  Cache.cpp
+  Serialize.cpp
+  cache/Entity.cpp
+  cache/LocalCache.cpp
+)
+target_link_libraries(cache
+  Boost::serialization
+  folly_headers
 )
 
 add_library(exporters_json exporters/Json.cpp)
