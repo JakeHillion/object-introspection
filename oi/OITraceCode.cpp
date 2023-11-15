@@ -40,10 +40,11 @@ constexpr int oidMagicId = 0x01DE8;
 
 namespace {
 
-class {
+template <size_t Size>
+class PointerHashSet {
  private:
   // 1 MiB of pointers
-  std::array<uintptr_t, (1 << 20) / sizeof(uintptr_t)> data;
+  std::array<uintptr_t, Size> data;
 
   // twang_mix64 hash function, taken from Folly where it is used
   // as the default hash function for 64-bit integers
@@ -84,7 +85,7 @@ class {
   bool add(const auto* p) {
     return add((uintptr_t)p);
   }
-} static pointers;
+};
 
 }  // namespace
 
