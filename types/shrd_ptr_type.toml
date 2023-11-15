@@ -34,38 +34,6 @@ void getSizeType(const %1%<T> &s_ptr, size_t& returnArg)
 }
 """
 
-handler = """
-template <typename DB, typename T0>
-struct TypeHandler<DB, %1%<T0>> {
-    using type = typename std::conditional<
-      std::is_void<T0>::value,
-      types::st::Unit<DB>,
-      types::st::Pair<DB,
-        types::st::VarInt<DB>,
-        types::st::Sum<DB,
-          types::st::Unit<DB>,
-          typename TypeHandler<DB, T0>::type
-      >>>::type;
-
-    static types::st::Unit<DB> getSizeType(
-        const %1%<T0>& container,
-        typename TypeHandler<DB, %1%<T0>>::type returnArg) {
-      if constexpr (!std::is_void<T0>::value) {
-        auto r0 = returnArg.write((uintptr_t)(container.get()));
-        if (container && pointers.add((uintptr_t)(container.get()))) {
-          return r0.template delegate<1>([&container](auto ret) {
-            return OIInternal::getSizeType<DB>(*(container.get()), ret);
-          });
-        } else {
-          return r0.template delegate<0>(std::identity());
-        }
-      } else {
-        return returnArg;
-      }
-    }
-};
-"""
-
 traversal_func = """
 auto tail = returnArg.write((uintptr_t)container.get());
 
@@ -77,7 +45,7 @@ if constexpr (std::is_void<T0>::value) {
     return tail.template delegate<0>(std::identity());
 
   return tail.template delegate<1>([&container](auto ret) {
-    return OIInternal::getSizeType<DB>(*container, ret);
+    return OIInternal::getSizeType<Ctx>(*container, ret);
   });
 }
 """
@@ -92,7 +60,7 @@ el.pointer = std::get<ParsedData::VarInt>(d.val).value;
 type = """
 types::st::Sum<DB,
   types::st::Unit<DB>,
-  typename TypeHandler<DB, T0>::type>
+  typename TypeHandler<Ctx, T0>::type>
 """
 func = """
 #ifdef __GLIBCXX__
@@ -116,10 +84,10 @@ el.container_stats.emplace(result::Element::ContainerStats {
   .length = sum.index, // 0 for empty containers/void, 1 otherwise
 });
 
-// Must be in a `if constexpr` or the compiler will complain about make_field<DB, void>
+// Must be in a `if constexpr` or the compiler will complain about make_field<Ctx, void>
 if constexpr (!std::is_void<T0>::value) {
   if (sum.index == 1) {
-    static constexpr auto element = make_field<DB, T0>("ptr_val");
+    static constexpr auto element = make_field<Ctx, T0>("ptr_val");
     stack_ins(element);
   }
 }

@@ -37,38 +37,6 @@ void getSizeType(const %1%<K, T, C, A> &container, size_t& returnArg)
 }
 """
 
-handler = """
-template <typename DB, typename T0, typename T1, typename T2, typename T3>
-struct TypeHandler<DB, %1%<T0, T1, T2, T3>> {
-  using type = types::st::Pair<DB,
-      types::st::VarInt<DB>,
-      types::st::List<DB, types::st::Pair<DB,
-        typename TypeHandler<DB, T0>::type,
-        typename TypeHandler<DB, T1>::type
-    >>>;
-
-  static types::st::Unit<DB> getSizeType(
-      const %1%<T0, T1, T2, T3>& container,
-      typename TypeHandler<DB, %1%<T0, T1, T2, T3>>::type returnArg) {
-    constexpr size_t nodeSize = sizeof(typename %1%<T0, T1, T2, T3>::node_type);
-
-    auto tail = returnArg.write(nodeSize).write(container.size());
-
-    // The double ampersand is needed otherwise this loop doesn't work with
-    // vector<bool>
-    for (const auto& it : container) {
-      tail = tail.delegate([&it](auto ret) {
-        return OIInternal::getSizeType<DB>(it.second, ret.delegate([&it](auto ret) {
-            return OIInternal::getSizeType<DB>(it.first, ret);
-        }));
-      });
-    }
-
-    return tail.finish();
-  }
-};
-"""
-
 traversal_func = """
 auto tail = returnArg
   .write((uintptr_t)&container)
@@ -76,11 +44,11 @@ auto tail = returnArg
 
 for (const auto &entry: container) {
   tail = tail.delegate([&key = entry.first, &value = entry.second](auto ret) {
-    auto start = maybeCaptureKey<captureKeys, DB, T0>(key, ret);
-    auto next =  start.delegate([&key](typename TypeHandler<DB, T0>::type ret) {
-      return OIInternal::getSizeType<DB>(key, ret);
+    auto start = maybeCaptureKey<captureKeys, Ctx, T0>(key, ret);
+    auto next =  start.delegate([&key](typename TypeHandler<Ctx, T0>::type ret) {
+      return OIInternal::getSizeType<Ctx>(key, ret);
     });
-    return OIInternal::getSizeType<DB>(value, next);
+    return OIInternal::getSizeType<Ctx>(value, next);
   });
 }
 
@@ -96,14 +64,14 @@ type = """
 std::conditional_t<captureKeys,
   types::st::List<DB,
     types::st::Pair<DB,
-      typename CaptureKeyHandler<DB, T0>::type,
+      typename CaptureKeyHandler<Ctx, T0>::type,
       types::st::Pair<DB,
-        typename TypeHandler<DB, T0>::type,
-        typename TypeHandler<DB, T1>::type>>>,
+        typename TypeHandler<Ctx, T0>::type,
+        typename TypeHandler<Ctx, T1>::type>>>,
   types::st::List<DB,
     types::st::Pair<DB,
-      typename TypeHandler<DB, T0>::type,
-      typename TypeHandler<DB, T1>::type>>
+      typename TypeHandler<Ctx, T0>::type,
+      typename TypeHandler<Ctx, T1>::type>>
 >
 """
 func = """
@@ -154,11 +122,11 @@ static_assert(false && "No known element_size for sets. See types/std_map_type.t
 #endif
 
 static constexpr std::array<inst::Field, 2> element_fields{
-  make_field<DB, T0>("key"),
-  make_field<DB, T1>("value"),
+  make_field<Ctx, T0>("key"),
+  make_field<Ctx, T1>("value"),
 };
 
-static constexpr auto processors = maybeCaptureKeysProcessor<captureKeys, DB, T0>();
+static constexpr auto processors = maybeCaptureKeysProcessor<captureKeys, Ctx, T0>();
 
 static constexpr inst::Field element{
   element_size,
