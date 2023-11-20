@@ -31,78 +31,103 @@ option(FORCE_LLVM_STATIC "Build with static llvm and clang" ON)
 find_package(gflags REQUIRED)
 
 ### tomlplusplus (for configuration files)
-FetchContent_Declare(
-  tomlplusplus
-  GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
-  GIT_TAG        4b166b69f28e70a416a1a04a98f365d2aeb90de8 # v3.2.0
-  GIT_PROGRESS   TRUE
-)
-FetchContent_MakeAvailable(tomlplusplus)
+find_package(tomlplusplus 3.2.0)
+if (NOT tomlplusplus_FOUND)
+  FetchContent_Declare(
+    tomlplusplus
+    GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+    GIT_TAG        4b166b69f28e70a416a1a04a98f365d2aeb90de8 # v3.2.0
+    GIT_PROGRESS   TRUE
+  )
+  FetchContent_MakeAvailable(tomlplusplus)
+endif()
 
 ### glog
-FetchContent_Declare(
-  glog
-  GIT_REPOSITORY https://github.com/google/glog.git
-  GIT_TAG        96a2f23dca4cc7180821ca5f32e526314395d26a
-  GIT_PROGRESS   TRUE
-)
-FetchContent_MakeAvailable(glog)
+find_package(glog 0.4.0)
+if (NOT glog_FOUND)
+  FetchContent_Declare(
+    glog
+    GIT_REPOSITORY https://github.com/google/glog.git
+    GIT_TAG        96a2f23dca4cc7180821ca5f32e526314395d26a
+    GIT_PROGRESS   TRUE
+  )
+  FetchContent_MakeAvailable(glog)
+endif()
 
 # These glog executable targets still generate warnings - disable warnings for
 # them explicitly
-target_compile_options(demangle_unittest PRIVATE "-w")
-target_compile_options(logging_unittest PRIVATE "-w")
-target_compile_options(stl_logging_unittest PRIVATE "-w")
-target_compile_options(symbolize_unittest PRIVATE "-w")
-target_compile_options(utilities_unittest PRIVATE "-w")
+# target_compile_options(demangle_unittest PRIVATE "-w")
+# target_compile_options(logging_unittest PRIVATE "-w")
+# target_compile_options(stl_logging_unittest PRIVATE "-w")
+# target_compile_options(symbolize_unittest PRIVATE "-w")
+# target_compile_options(utilities_unittest PRIVATE "-w")
 
 ### googletest
 # Do this in the main file so it can be fetched before setting project warnings.
 # After this is fixed with FetchContent, move to test/CMakeLists.txt.
-FetchContent_Declare(
-  googletest
-  GIT_REPOSITORY https://github.com/google/googletest.git
-  GIT_TAG        1ed6a8c67a0bd675149ece27bbec0ef1759854cf
-  GIT_PROGRESS   TRUE
-)
-FetchContent_MakeAvailable(googletest)
+find_package(googletest 1.14.0)
+if (NOT googletest_FOUND)
+  FetchContent_Declare(
+    googletest
+    # GIT_REPOSITORY https://github.com/google/googletest.git
+    # GIT_TAG        1ed6a8c67a0bd675149ece27bbec0ef1759854cf
+    # GIT_PROGRESS   TRUE
+    SOURCE_DIR @gtest_src@
+  )
+  FetchContent_MakeAvailable(googletest)
+endif()
 
 ### rocksdb
-FetchContent_Declare(
-  rocksdb
-  GIT_REPOSITORY https://github.com/facebook/rocksdb.git
-  GIT_TAG        f32521662acf3352397d438b732144c7813bbbec # v8.5.3
-  GIT_PROGRESS   TRUE
-)
-FetchContent_Populate(rocksdb)
-add_custom_target(librocksdb ALL
-  WORKING_DIRECTORY ${rocksdb_SOURCE_DIR}
-  COMMAND cmake -G Ninja -B ${rocksdb_BINARY_DIR} -DCMAKE_BUILD_TYPE=Release -DWITH_GFLAGS=Off -DWITH_LIBURING=Off -DWITH_ZSTD=On -DFAIL_ON_WARNINGS=Off
-  COMMAND cmake --build ${rocksdb_BINARY_DIR} --target rocksdb
-  BYPRODUCTS ${rocksdb_BINARY_DIR}/librocksdb.a
-  COMMENT "Building RocksDB"
-  USES_TERMINAL
-)
-include_directories(SYSTEM "${rocksdb_SOURCE_DIR}/include")
+find_package(rocksdb 8.5.3)
+if (NOT RocksDB_FOUND)
+  FetchContent_Declare(
+    rocksdb
+    GIT_REPOSITORY https://github.com/facebook/rocksdb.git
+    GIT_TAG        f32521662acf3352397d438b732144c7813bbbec # v8.5.3
+    GIT_PROGRESS   TRUE
+  )
+  FetchContent_Populate(rocksdb)
+  add_custom_target(librocksdb_build ALL
+    WORKING_DIRECTORY ${rocksdb_SOURCE_DIR}
+    COMMAND CXX_FLAGS=-Wno-error cmake -G Ninja -B ${rocksdb_BINARY_DIR} -DCMAKE_BUILD_TYPE=Release -DWITH_GFLAGS=Off -DWITH_LIBURING=Off -DWITH_ZSTD=On -DFAIL_ON_WARNINGS=Off
+    COMMAND cmake --build ${rocksdb_BINARY_DIR} --target rocksdb
+    BYPRODUCTS ${rocksdb_BINARY_DIR}/librocksdb.a
+    COMMENT "Building RocksDB"
+    USES_TERMINAL
+  )
+  add_library(librocksdb INTERFACE)
+  add_dependencies(librocksdb librocksdb_build)
+  target_include_directories(librocksdb INTERFACE SYSTEM "${rocksdb_SOURCE_DIR}/include")
+  add_library(RocksDB::rocksdb ALIAS librocksdb)
+
+  ### zstd (for rocksdb)
+  find_package(zstd REQUIRED)
+
+  target_link_libraries(librocksdb INTERFACE zstd::zstd ${rocksdb_BINARY_DIR}/librocksdb.a)
+endif()
 
 ### folly
 ### use folly as a header only library. some features won't be supported.
 FetchContent_Declare(
   folly
-  GIT_REPOSITORY https://github.com/JakeHillion/folly.git
-  GIT_TAG        8db54418e3ccdd97619ac8b69bb3702f82bb0f66
-  GIT_PROGRESS   TRUE
+  # GIT_REPOSITORY https://github.com/JakeHillion/folly.git
+  # GIT_TAG        8db54418e3ccdd97619ac8b69bb3702f82bb0f66
+  # GIT_PROGRESS   TRUE
+  SOURCE_DIR @folly_src@
 )
 FetchContent_Populate(folly)
 
 ### range-v3
-FetchContent_Declare(
-  range-v3
-  GIT_REPOSITORY https://github.com/ericniebler/range-v3.git
-  GIT_TAG        a81477931a8aa2ad025c6bda0609f38e09e4d7ec # 0.12.0
-  GIT_PROGRESS   TRUE
-)
-FetchContent_MakeAvailable(range-v3)
+find_package(Range-v3 0.12.0)
+if (NOT Range-v3_FOUND)
+  FetchContent_Declare(
+    range-v3
+    GIT_REPOSITORY https://github.com/ericniebler/range-v3.git
+    GIT_TAG        a81477931a8aa2ad025c6bda0609f38e09e4d7ec # 0.12.0
+    GIT_PROGRESS   TRUE
+  )
+  FetchContent_MakeAvailable(range-v3)
+endif()
 
 set_project_warnings()
 
@@ -123,9 +148,13 @@ endif()
 ### (Re)download submodules
 find_package(Git QUIET)
 
+if (NOT DEFINED drgn_SOURCE_DIR)
+    SET(drgn_SOURCE_DIR "${PROJECT_SOURCE_DIR}/extern/drgn")
+endif()
+
 # TODO: No idea if this huge block is required, just picked from an example. There may be a short-hand.
-if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
-# Update submodules as needed
+if(NOT EXISTS "${drgn_SOURCE_DIR}" AND GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
+    # Update submodules as needed
     option(GIT_SUBMODULE "Check submodules during build" ON)
     if(GIT_SUBMODULE)
         message(STATUS "Submodule update")
@@ -144,11 +173,11 @@ if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
         if(NOT GIT_SUBMOD_RESULT EQUAL "0")
             message(FATAL_ERROR "git submodule update --init failed with ${GIT_SUBMOD_RESULT}, please checkout submodules")
         endif()
-    endif()
-endif()
 
-if(NOT EXISTS "${PROJECT_SOURCE_DIR}/extern/drgn")
-    message(FATAL_ERROR "The submodules were not downloaded! GIT_SUBMODULE was turned off or failed. Please update submodules and try again.")
+        if(NOT EXISTS "${drgn_SOURCE_DIR}")
+            message(FATAL_ERROR "The submodules were not downloaded! Please update submodules and try again.")
+        endif()
+    endif()
 endif()
 
 ### Select Python version
@@ -222,37 +251,39 @@ set(DRGN_CONFIGURE_FLAGS "--with-libkdumpfile=no")
 if (ASAN)
   list(APPEND DRGN_CONFIGURE_FLAGS "--enable-asan=yes")
 endif()
+
+set(drgn_BUILD_DIR "${drgn_SOURCE_DIR}/build")
+
 add_custom_target(libdrgn ALL
-  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/extern/drgn
-  COMMAND unset BISON_PKGDATADIR && CC=gcc CFLAGS="${DRGN_CFLAGS}" CONFIGURE_FLAGS="${DRGN_CONFIGURE_FLAGS}" ${PYTHON} ./setup.py build --build-temp build
-  BYPRODUCTS ${CMAKE_CURRENT_SOURCE_DIR}/extern/drgn/build/.libs/libdrgnimpl.a
-  ${CMAKE_CURRENT_SOURCE_DIR}/extern/drgn/build/velfutils/libdw/libdw.a
-  ${CMAKE_CURRENT_SOURCE_DIR}/extern/drgn/build/velfutils/libelf/libelf.a
-  ${CMAKE_CURRENT_SOURCE_DIR}/extern/drgn/build/velfutils/libdwelf/libdwelf.a
+  WORKING_DIRECTORY ${drgn_SOURCE_DIR}
+  COMMAND unset BISON_PKGDATADIR && CC=gcc CFLAGS="${DRGN_CFLAGS}" CONFIGURE_FLAGS="${DRGN_CONFIGURE_FLAGS}" ${PYTHON} ./setup.py build --build-temp "${drgn_BUILD_DIR}"
+  BYPRODUCTS ${drgn_BUILD_DIR}/.libs/libdrgnimpl.a
+  ${drgn_BUILD_DIR}/velfutils/libdw/libdw.a
+  ${drgn_BUILD_DIR}/velfutils/libelf/libelf.a
+  ${drgn_BUILD_DIR}/velfutils/libdwelf/libdwelf.a
   COMMENT "Building drgn"
   USES_TERMINAL
 )
-set(DRGN_PATH "${PROJECT_SOURCE_DIR}/extern/drgn/build")
 
 # Ideally drgn stuff should be together at the end. But looks like rpath needs
 # to be set before add_executable() unfortunately. Maybe split libdrgn stuff
 # into a separate file later.
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
 set(CMAKE_INSTALL_RPATH
-  "${DRGN_PATH}/.libs"
-  "${DRGN_PATH}/velfutils/libdw"
-  "${DRGN_PATH}/velfutils/libelf"
-  "${DRGN_PATH}/velfutils/libdwelf"
+  "${drgn_BUILD_DIR}/.libs"
+  "${drgn_BUILD_DIR}/velfutils/libdw"
+  "${drgn_BUILD_DIR}/velfutils/libelf"
+  "${drgn_BUILD_DIR}/velfutils/libdwelf"
 )
 set(CMAKE_BUILD_RPATH
-  "${DRGN_PATH}/.libs"
-  "${DRGN_PATH}/velfutils/libdw"
-  "${DRGN_PATH}/velfutils/libelf"
-  "${DRGN_PATH}/velfutils/libdwelf"
+  "${drgn_BUILD_DIR}/.libs"
+  "${drgn_BUILD_DIR}/velfutils/libdw"
+  "${drgn_BUILD_DIR}/velfutils/libelf"
+  "${drgn_BUILD_DIR}/velfutils/libdwelf"
 )
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-include_directories(SYSTEM "${DRGN_PATH}")
+include_directories(SYSTEM "${drgn_BUILD_DIR}")
 
 if (STATIC_LINK)
   # glog links against the `gflags` target, which is an alias for `gflags_shared`
@@ -322,7 +353,7 @@ else()
 endif()
 
 target_link_libraries(oicore
-  "-L${DRGN_PATH}/.libs"
+  "-L${drgn_BUILD_DIR}/.libs"
   drgn
   dw
   pthread
@@ -333,9 +364,8 @@ add_library(treebuilder
   oi/TreeBuilder.cpp
   oi/exporters/TypeCheckingWalker.cpp
 )
-add_dependencies(treebuilder librocksdb)
 target_link_libraries(treebuilder
-  ${rocksdb_BINARY_DIR}/librocksdb.a
+  RocksDB::rocksdb
   oicore # overkill but it does need a lot of stuff
   zstd::zstd
 )
@@ -373,9 +403,8 @@ target_link_libraries(oip oicore)
 
 ### Object Introspection RocksDB Printer (OIRP)
 add_executable(oirp tools/OIRP.cpp)
-add_dependencies(oirp librocksdb)
 target_link_libraries(oirp
-  ${rocksdb_BINARY_DIR}/librocksdb.a
+  rocksdb::rocksdb
   zstd::zstd
   msgpackc
 )
