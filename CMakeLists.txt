@@ -104,6 +104,15 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(range-v3)
 
+### cxxopts
+FetchContent_Declare(
+  cxxopts
+  GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
+  GIT_TAG        eb787304d67ec22f7c3a184ee8b4c481d04357fd # v3.1.1
+  GIT_PROGRESS   TRUE
+)
+FetchContent_MakeAvailable(cxxopts)
+
 set_project_warnings()
 
 if (ASAN)
@@ -289,7 +298,7 @@ add_library(oicore
   oi/Serialize.cpp
 )
 add_dependencies(oicore libdrgn)
-target_include_directories(oicore SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
+target_include_directories(oicore SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
 target_compile_definitions(oicore PRIVATE ${LLVM_DEFINITIONS})
 target_include_directories(oicore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
@@ -363,6 +372,7 @@ add_executable(oilgen
   oi/OIGenerator.cpp
 )
 target_link_libraries(oilgen
+  cxxopts
   drgn_utils
   oicore
 )
