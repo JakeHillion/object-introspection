@@ -539,7 +539,7 @@ void CodeGen::getClassSizeFuncDef(const Class& c, std::string& code) {
     std::string childVtableName = "vtable for ";
     childVtableName += fqChildName;
 
-    auto optVtableSym = symbols_.locateSymbol(childVtableName, true);
+    auto optVtableSym = symbols_->locateSymbol(childVtableName, true);
     if (!optVtableSym) {
       //        LOG(ERROR) << "Failed to find vtable address for '" <<
       //        childVtableName; LOG(ERROR) << "Falling back to non dynamic
@@ -1106,15 +1106,8 @@ bool CodeGen::codegenFromDrgn(struct drgn_type* drgnType,
 }
 
 bool CodeGen::codegenFromDrgn(struct drgn_type* drgnType, std::string& code) {
-  try {
-    containerInfos_.reserve(config_.containerConfigPaths.size());
-    for (const auto& path : config_.containerConfigPaths) {
-      registerContainer(path);
-    }
-  } catch (const ContainerInfoError& err) {
-    LOG(ERROR) << "Error reading container TOML file " << err.what();
+  if (!registerContainers())
     return false;
-  }
 
   TypeGraph typeGraph;
   try {
@@ -1127,6 +1120,20 @@ bool CodeGen::codegenFromDrgn(struct drgn_type* drgnType, std::string& code) {
   transform(typeGraph);
   generate(typeGraph, code, drgnType);
   return true;
+}
+
+bool CodeGen::registerContainers() {
+  try {
+    containerInfos_.reserve(config_.containerConfigPaths.size());
+    size_t i = 0;
+    for (const auto& path : config_.containerConfigPaths) {
+      registerContainer(path);
+    }
+    return true;
+  } catch (const ContainerInfoError& err) {
+    LOG(ERROR) << "Error reading container TOML file " << err.what();
+    return false;
+  }
 }
 
 void CodeGen::registerContainer(std::unique_ptr<ContainerInfo> info) {
@@ -1170,7 +1177,7 @@ void CodeGen::transform(TypeGraph& typeGraph) {
         .chaseRawPointers = config_.features[Feature::ChaseRawPointers],
     };
     DrgnParser drgnParser{typeGraph, options};
-    pm.addPass(AddChildren::createPass(drgnParser, symbols_));
+    pm.addPass(AddChildren::createPass(drgnParser, *symbols_));
 
     // Re-run passes over newly added children
     pm.addPass(Flattener::createPass());
@@ -1286,7 +1293,8 @@ void CodeGen::generate(
   code += "\nusing __ROOT_TYPE__ = " + rootType.name() + ";\n";
   code += "} // namespace\n} // namespace OIInternal\n";
 
-  const auto typeName = SymbolService::getTypeName(drgnType);
+  // const auto typeName = SymbolService::getTypeName(drgnType);
+  const std::string typeName{"typeName"};
   if (config_.features[Feature::TreeBuilderV2]) {
     FuncGen::DefineTopLevelIntrospect(code, typeName);
   } else {
