@@ -202,7 +202,7 @@ std::regex getMatcher(const std::string& typeName) {
 ContainerInfo::ContainerInfo(const fs::path& path) {
   toml::table container;
   try {
-    container = toml::parse_file(std::string(path));
+    container = toml::parse_file(path.string());
   } catch (const toml::parse_error& err) {
     // Convert into a ContainerInfoError, just to avoid having to include
     // the huge TOML++ header in the caller's file. Use toml::parse_error's
