@@ -79,11 +79,11 @@ TEST_F(AddChildrenTest, InheritancePolymorphic) {
          Function: A
          Function: A
          Child
-[17]       Class: B (size: 40)
+[18]       Class: B (size: 40)
              Parent (offset: 0)
                [0]
              Member: vec_b (offset: 16)
-[4]            Class: vector<int, std::allocator<int> > (size: 24)
+[17]           Container: std::vector (size: 24)
                  Param
                    Primitive: int32_t
                  Param
@@ -106,15 +106,17 @@ TEST_F(AddChildrenTest, InheritancePolymorphic) {
                      Function: ~allocator
                      Function: allocate
                      Function: deallocate
-                 *
+                 Underlying
+[4]                Class: vector<int, std::allocator<int> > (size: 24)
+*
              Function: ~B (virtual)
              Function: myfunc (virtual)
              Function: B
              Function: B
              Child
-[19]           Class: C (size: 48)
+[20]           Class: C (size: 48)
                  Parent (offset: 0)
-                   [17]
+                   [18]
                  Member: int_c (offset: 40)
                    Primitive: int32_t
                  Function: ~C (virtual)
@@ -135,11 +137,11 @@ TEST_F(AddChildrenTest, InheritancePolymorphic) {
          Function: ~A (virtual)
          Function: myfunc (virtual)
          Child
-[13]       Class: B (size: 40)
+[14]       Class: B (size: 40)
              Parent (offset: 0)
                [0]
              Member: vec_b (offset: 16)
-[4]            Class: vector<int, std::allocator<int> > (size: 24)
+[13]           Container: std::vector (size: 24)
                  Param
                    Primitive: int32_t
                  Param
@@ -159,6 +161,8 @@ TEST_F(AddChildrenTest, InheritancePolymorphic) {
                      Function: ~allocator
                      Function: allocate
                      Function: deallocate
+                 Underlying
+[4]                Class: vector<int, std::allocator<int> > (size: 24)
                  *
              Function: operator=
              Function: B
@@ -166,9 +170,9 @@ TEST_F(AddChildrenTest, InheritancePolymorphic) {
              Function: ~B (virtual)
              Function: myfunc (virtual)
              Child
-[15]           Class: C (size: 48)
+[16]           Class: C (size: 48)
                  Parent (offset: 0)
-                   [13]
+                   [14]
                  Member: int_c (offset: 40)
                    Primitive: int32_t
                  Function: operator=

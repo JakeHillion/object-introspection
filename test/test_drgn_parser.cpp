@@ -10,6 +10,7 @@
 #include "oi/type_graph/Printer.h"
 #include "oi/type_graph/TypeGraph.h"
 #include "oi/type_graph/Types.h"
+#include "test/type_graph_utils.h"
 
 using namespace type_graph;
 
@@ -28,7 +29,8 @@ void DrgnParserTest::TearDownTestSuite() {
 
 DrgnParser DrgnParserTest::getDrgnParser(TypeGraph& typeGraph,
                                          DrgnParserOptions options) {
-  DrgnParser drgnParser{typeGraph, options};
+  static auto infos = getContainerInfos();
+  DrgnParser drgnParser{typeGraph, infos, options};
   return drgnParser;
 }
 
@@ -255,8 +257,8 @@ TEST_F(DrgnParserTest, InheritanceMultiple) {
 TEST_F(DrgnParserTest, Container) {
   testMultiCompilerGlob("oid_test_case_std_vector_int_empty",
                         R"(
-[13] Pointer
-[0]    Class: vector<int, std::allocator<int> > (size: 24)
+[14] Pointer
+[13]   Container: std::vector (size: 24)
          Param
            Primitive: int32_t
          Param
@@ -279,12 +281,18 @@ TEST_F(DrgnParserTest, Container) {
              Function: ~allocator
              Function: allocate
              Function: deallocate
-         Parent (offset: 0)
+         Underlying
+[0]        Class: vector<int, std::allocator<int> > (size: 24)
+             Param
+               Primitive: int32_t
+             Param
+               [1]
+             Parent (offset: 0)
 *
 )",
                         R"(
-[9]  Pointer
-[0]    Class: vector<int, std::allocator<int> > (size: 24)
+[10] Pointer
+[9]    Container: std::vector (size: 24)
          Param
            Primitive: int32_t
          Param
@@ -304,7 +312,13 @@ TEST_F(DrgnParserTest, Container) {
              Function: ~allocator
              Function: allocate
              Function: deallocate
-         Parent (offset: 0)
+         Underlying
+[0]        Class: vector<int, std::allocator<int> > (size: 24)
+             Param
+               Primitive: int32_t
+             Param
+               [1]
+             Parent (offset: 0)
 *
 )");
 }

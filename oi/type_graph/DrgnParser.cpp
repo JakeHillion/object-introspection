@@ -25,6 +25,8 @@ extern "C" {
 #include <drgn.h>
 }
 
+#include <regex>
+
 namespace oi::detail::type_graph {
 namespace {
 
@@ -146,7 +148,7 @@ Type& DrgnParser::enumerateType(struct drgn_type* type) {
   return *t;
 }
 
-Class& DrgnParser::enumerateClass(struct drgn_type* type) {
+Type& DrgnParser::enumerateClass(struct drgn_type* type) {
   std::string fqName;
   char* nameStr = nullptr;
   size_t length = 0;
@@ -180,13 +182,19 @@ Class& DrgnParser::enumerateClass(struct drgn_type* type) {
                             std::to_string(drgn_type_kind(type))};
   }
 
-  auto& c = makeType<Class>(
-      type, kind, std::move(name), std::move(fqName), size, virtuality);
+  Class& c =
+      makeType<Class>(type, kind, std::move(name), fqName, size, virtuality);
 
   enumerateClassTemplateParams(type, c.templateParams);
   enumerateClassParents(type, c.parents);
   enumerateClassMembers(type, c.members);
   enumerateClassFunctions(type, c.functions);
+
+  if (auto* info = getContainerInfo(fqName)) {
+    auto& container = makeType<Container>(type, *info, size, &c);
+    container.templateParams = c.templateParams;
+    return container;
+  }
 
   return c;
 }
@@ -503,6 +511,15 @@ bool DrgnParser::chasePointer() const {
   if (depth_ == 1)
     return true;
   return options_.chaseRawPointers;
+}
+
+ContainerInfo* DrgnParser::getContainerInfo(const std::string& fqName) const {
+  for (const auto& containerInfo : containers_) {
+    if (std::regex_search(fqName, containerInfo->matcher)) {
+      return containerInfo.get();
+    }
+  }
+  return nullptr;
 }
 
 DrgnParserError::DrgnParserError(const std::string& msg, struct drgn_error* err)

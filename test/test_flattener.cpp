@@ -799,6 +799,27 @@ TEST(FlattenerTest, ParentClassAndContainer) {
 )");
 }
 
+TEST(FlattenerTest, ContainerWithParent) {
+  // This is necessary to correctly calculate container alignment
+  test(Flattener::createPass(),
+       R"(
+[0] Container: std::vector (size: 24)
+      Underlying
+[1]     Class: vector (size: 24)
+          Parent (offset: 0)
+[2]         Class: Parent (size: 4)
+              Member: x (offset: 0)
+                Primitive: int32_t
+)",
+       R"(
+[0] Container: std::vector (size: 24)
+      Underlying
+[1]     Class: vector (size: 24)
+          Member: x (offset: 0)
+            Primitive: int32_t
+)");
+}
+
 TEST(FlattenerTest, AllocatorParamInParent) {
   test(Flattener::createPass(),
        R"(
@@ -857,8 +878,7 @@ TEST(FlattenerTest, AllocatorUnfixableNoParent) {
 )");
 }
 
-TEST(FlattenerTest, AllocatorUnfixableParentNotClass) {
-  // This could be supported if need-be, we just don't do it yet
+TEST(FlattenerTest, AllocatorParamInParentContainer) {
   test(Flattener::createPass(),
        R"(
 [0] Container: std::vector (size: 24)
