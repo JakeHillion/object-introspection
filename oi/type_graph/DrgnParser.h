@@ -51,14 +51,16 @@ struct DrgnParserOptions {
  */
 class DrgnParser {
  public:
-  DrgnParser(TypeGraph& typeGraph, DrgnParserOptions options)
-      : typeGraph_(typeGraph), options_(options) {
+  DrgnParser(TypeGraph& typeGraph,
+             const std::vector<std::unique_ptr<ContainerInfo>>& containers,
+             DrgnParserOptions options)
+      : typeGraph_(typeGraph), containers_(containers), options_(options) {
   }
   Type& parse(struct drgn_type* root);
 
  private:
   Type& enumerateType(struct drgn_type* type);
-  Class& enumerateClass(struct drgn_type* type);
+  Type& enumerateClass(struct drgn_type* type);
   Enum& enumerateEnum(struct drgn_type* type);
   Typedef& enumerateTypedef(struct drgn_type* type);
   Type& enumeratePointer(struct drgn_type* type);
@@ -81,10 +83,11 @@ class DrgnParser {
   template <typename T, typename... Args>
   T& makeType(struct drgn_type* drgnType, Args&&... args) {
     auto& newType = typeGraph_.makeType<T>(std::forward<Args>(args)...);
-    drgn_types_.insert({drgnType, newType});
+    drgn_types_.insert_or_assign(drgnType, newType);
     return newType;
   }
   bool chasePointer() const;
+  ContainerInfo* getContainerInfo(const std::string& fqName) const;
 
   // Store a mapping of drgn types to type graph nodes for deduplication during
   // parsing. This stops us getting caught in cycles.
@@ -92,6 +95,7 @@ class DrgnParser {
       drgn_types_;
 
   TypeGraph& typeGraph_;
+  const std::vector<std::unique_ptr<ContainerInfo>>& containers_;
   int depth_;
   DrgnParserOptions options_;
 };

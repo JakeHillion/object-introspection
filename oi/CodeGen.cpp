@@ -32,7 +32,6 @@
 #include "type_graph/DrgnParser.h"
 #include "type_graph/EnforceCompatibility.h"
 #include "type_graph/Flattener.h"
-#include "type_graph/IdentifyContainers.h"
 #include "type_graph/KeyCapture.h"
 #include "type_graph/NameGen.h"
 #include "type_graph/Prune.h"
@@ -56,7 +55,6 @@ using type_graph::DrgnParserOptions;
 using type_graph::EnforceCompatibility;
 using type_graph::Enum;
 using type_graph::Flattener;
-using type_graph::IdentifyContainers;
 using type_graph::KeyCapture;
 using type_graph::Member;
 using type_graph::NameGen;
@@ -1147,7 +1145,7 @@ void CodeGen::addDrgnRoot(struct drgn_type* drgnType, TypeGraph& typeGraph) {
   DrgnParserOptions options{
       .chaseRawPointers = config_.features[Feature::ChaseRawPointers],
   };
-  DrgnParser drgnParser{typeGraph, options};
+  DrgnParser drgnParser{typeGraph, containerInfos_, options};
   Type& parsedRoot = drgnParser.parse(drgnType);
   typeGraph.addRoot(parsedRoot);
 }
@@ -1159,7 +1157,6 @@ void CodeGen::transform(TypeGraph& typeGraph) {
   pm.addPass(RemoveTopLevelPointer::createPass());
   pm.addPass(Flattener::createPass());
   pm.addPass(AlignmentCalc::createPass());
-  pm.addPass(IdentifyContainers::createPass(containerInfos_));
   pm.addPass(TypeIdentifier::createPass(config_.passThroughTypes));
   if (config_.features[Feature::PruneTypeGraph])
     pm.addPass(Prune::createPass());
@@ -1169,13 +1166,12 @@ void CodeGen::transform(TypeGraph& typeGraph) {
     DrgnParserOptions options{
         .chaseRawPointers = config_.features[Feature::ChaseRawPointers],
     };
-    DrgnParser drgnParser{typeGraph, options};
+    DrgnParser drgnParser{typeGraph, containerInfos_, options};
     pm.addPass(AddChildren::createPass(drgnParser, symbols_));
 
     // Re-run passes over newly added children
     pm.addPass(Flattener::createPass());
     pm.addPass(AlignmentCalc::createPass());
-    pm.addPass(IdentifyContainers::createPass(containerInfos_));
     pm.addPass(TypeIdentifier::createPass(config_.passThroughTypes));
     if (config_.features[Feature::PruneTypeGraph])
       pm.addPass(Prune::createPass());

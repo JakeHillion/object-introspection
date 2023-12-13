@@ -43,7 +43,6 @@ add_executable(test_type_graph
   test_drgn_parser.cpp
   test_enforce_compatibility.cpp
   test_flattener.cpp
-  test_identify_containers.cpp
   test_key_capture.cpp
   test_name_gen.cpp
   test_node_tracker.cpp
