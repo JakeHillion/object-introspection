@@ -122,6 +122,9 @@ class RecursiveVisitor : public Visitor {
   virtual void visit(Pointer& p) {
     accept(p.pointeeType());
   }
+  virtual void visit(Reference& r) {
+    accept(r.pointeeType());
+  }
   virtual void visit(Dummy&) {
   }
   virtual void visit(DummyAllocator& d) {
@@ -186,6 +189,10 @@ class RecursiveMutator : public Mutator {
     return td;
   }
   virtual Type& visit(Pointer& p) {
+    p.setPointeeType(mutate(p.pointeeType()));
+    return p;
+  }
+  virtual Type& visit(Reference& p) {
     p.setPointeeType(mutate(p.pointeeType()));
     return p;
   }
