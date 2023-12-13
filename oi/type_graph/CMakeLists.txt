@@ -2,6 +2,7 @@ add_library(type_graph
   AddChildren.cpp
   AddPadding.cpp
   AlignmentCalc.cpp
+  ClangTypeParser.cpp
   DrgnParser.cpp
   EnforceCompatibility.cpp
   Flattener.cpp
@@ -25,3 +26,4 @@ target_link_libraries(type_graph
   "-L${DRGN_PATH}/.libs"
   drgn
 )
+target_include_directories(type_graph SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
