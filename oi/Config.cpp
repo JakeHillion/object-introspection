@@ -22,6 +22,8 @@
 #include <boost/property_tree/ini_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <filesystem>
+#include <range/v3/action/sort.hpp>
+#include <range/v3/action/unique.hpp>
 
 #include "oi/support/Toml.h"
 
@@ -53,6 +55,9 @@ std::optional<FeatureSet> processConfigFiles(
       return std::nullopt;
     enables |= *fs;
   }
+
+  ranges::actions::sort(generatorConfig.containerConfigPaths);
+  ranges::actions::unique(generatorConfig.containerConfigPaths);
 
   // Override anything from the config files with command line options
   for (auto [k, v] : featureMap) {
@@ -108,8 +113,8 @@ std::optional<FeatureSet> processConfigFile(
           if the right path is absolute, else append the right path to the
           left path.
           */
-          generatorConfig.containerConfigPaths.emplace(configDirectory /
-                                                       el.get());
+          generatorConfig.containerConfigPaths.emplace_back(configDirectory /
+                                                            el.get());
         }
       });
     }
