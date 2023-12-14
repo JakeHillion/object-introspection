@@ -85,7 +85,7 @@ void Printer::visit(const Class& c) {
     print_function(function);
   }
   for (auto& child : c.children) {
-    print_child(child);
+    print_type("Child", child);
   }
 }
 
@@ -93,10 +93,13 @@ void Printer::visit(const Container& c) {
   if (prefix(c))
     return;
 
-  out_ << "Container: " << c.name() << " (size: " << c.size() << ")"
-       << std::endl;
+  out_ << "Container: " << c.name() << " (size: " << c.size()
+       << align_str(c.align()) << ")" << std::endl;
   for (const auto& param : c.templateParams) {
     print_param(param);
+  }
+  if (c.underlying()) {
+    print_type("Underlying", *c.underlying());
   }
 }
 
@@ -141,6 +144,17 @@ void Printer::visit(const Pointer& p) {
     return;
 
   out_ << "Pointer";
+  if (auto inp = p.inputName(); !inp.empty())
+    out_ << " [" << inp << "]";
+  out_ << std::endl;
+  print(p.pointeeType());
+}
+
+void Printer::visit(const Reference& p) {
+  if (prefix(p))
+    return;
+
+  out_ << "Reference";
   if (auto inp = p.inputName(); !inp.empty())
     out_ << " [" << inp << "]";
   out_ << std::endl;
@@ -240,11 +254,11 @@ void Printer::print_function(const Function& function) {
   depth_--;
 }
 
-void Printer::print_child(const Type& child) {
+void Printer::print_type(std::string_view header, const Type& type) {
   depth_++;
   prefix();
-  out_ << "Child" << std::endl;
-  print(child);
+  out_ << header << std::endl;
+  print(type);
   depth_--;
 }
 

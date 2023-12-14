@@ -49,6 +49,7 @@
   X(Array)           \
   X(Typedef)         \
   X(Pointer)         \
+  X(Reference)       \
   X(Dummy)           \
   X(DummyAllocator)  \
   X(CaptureKeys)
@@ -150,7 +151,6 @@ struct Function {
   int virtuality;
 };
 
-class Class;
 struct Parent {
   Parent(Type& type, uint64_t bitOffset) : type_(type), bitOffset(bitOffset) {
   }
@@ -298,10 +298,6 @@ class Class : public Type {
 
   DECLARE_ACCEPT
 
-  Kind kind() const {
-    return kind_;
-  }
-
   virtual const std::string& name() const override {
     return name_;
   }
@@ -326,12 +322,16 @@ class Class : public Type {
     return align_;
   }
 
+  void setAlign(uint64_t alignment) {
+    align_ = alignment;
+  }
+
   virtual NodeId id() const override {
     return id_;
   }
 
-  void setAlign(uint64_t alignment) {
-    align_ = alignment;
+  Kind kind() const {
+    return kind_;
   }
 
   int virtuality() const {
@@ -371,10 +371,19 @@ class Class : public Type {
   bool packed_ = false;
 };
 
+/*
+ * Container
+ *
+ * A type of class for which we can do special processing.
+ */
 class Container : public Type {
  public:
-  Container(NodeId id, const ContainerInfo& containerInfo, size_t size)
+  Container(NodeId id,
+            const ContainerInfo& containerInfo,
+            size_t size,
+            Type* underlying)
       : containerInfo_(containerInfo),
+        underlying_(underlying),
         name_(containerInfo.typeName),
         inputName_(containerInfo.typeName),
         size_(size),
@@ -386,6 +395,7 @@ class Container : public Type {
             const ContainerInfo& containerInfo)
       : templateParams(other.templateParams),
         containerInfo_(containerInfo),
+        underlying_(other.underlying_),
         name_(other.name_),
         inputName_(other.inputName_),
         size_(other.size_),
@@ -396,20 +406,16 @@ class Container : public Type {
 
   DECLARE_ACCEPT
 
-  const std::string& containerName() const {
-    return containerInfo_.typeName;
-  }
-
   virtual const std::string& name() const override {
     return name_;
   }
 
-  void setName(std::string name) {
-    name_ = std::move(name);
-  }
-
   virtual std::string_view inputName() const override {
     return inputName_;
+  }
+
+  void setName(std::string name) {
+    name_ = std::move(name);
   }
 
   void setInputName(std::string name) {
@@ -424,18 +430,31 @@ class Container : public Type {
     return align_;
   }
 
+  void setAlign(uint64_t alignment) {
+    align_ = alignment;
+  }
+
   virtual NodeId id() const override {
     return id_;
   }
 
-  void setAlign(uint64_t alignment) {
-    align_ = alignment;
+  const std::string& containerName() const {
+    return containerInfo_.typeName;
+  }
+
+  Type* underlying() const {
+    return underlying_;
+  }
+
+  void setUnderlying(Type* underlying) {
+    underlying_ = underlying;
   }
 
   std::vector<TemplateParam> templateParams;
   const ContainerInfo& containerInfo_;
 
  private:
+  Type* underlying_;
   std::string name_;
   std::string inputName_;
   size_t size_;
@@ -677,6 +696,61 @@ class Pointer : public Type {
 
   void regenerateName() {
     name_ = pointeeType_.get().name() + "*";
+  }
+
+  virtual std::string_view inputName() const override {
+    return inputName_;
+  }
+
+  void setInputName(std::string name) {
+    inputName_ = std::move(name);
+  }
+
+  virtual size_t size() const override {
+    return sizeof(uintptr_t);
+  }
+
+  virtual uint64_t align() const override {
+    return size();
+  }
+
+  virtual NodeId id() const override {
+    return id_;
+  }
+
+  Type& pointeeType() const {
+    return pointeeType_;
+  }
+
+  void setPointeeType(Type& type) {
+    pointeeType_ = type;
+  }
+
+ private:
+  std::reference_wrapper<Type> pointeeType_;
+  std::string inputName_;
+  NodeId id_ = -1;
+
+  std::string name_;
+};
+
+class Reference : public Type {
+ public:
+  explicit Reference(NodeId id, Type& pointeeType)
+      : pointeeType_(pointeeType), id_(id) {
+    regenerateName();
+  }
+
+  static inline constexpr bool has_node_id = true;
+
+  DECLARE_ACCEPT
+
+  virtual const std::string& name() const override {
+    return name_;
+  }
+
+  void regenerateName() {
+    name_ = pointeeType_.get().name() + "&";
   }
 
   virtual std::string_view inputName() const override {

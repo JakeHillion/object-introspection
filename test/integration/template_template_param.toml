@@ -1,0 +1,16 @@
+includes = ["vector", "utility", "string"]
+
+definitions = '''
+template <typename K, typename V, template <typename, typename> typename Pair>
+struct bad_map {
+  std::vector<Pair<K, K>> keys;
+  std::vector<Pair<V, V>> values;
+};
+'''
+
+[cases]
+  [cases.int_int_empty]
+    param_types = ["const bad_map<int, std::string, std::pair>&"]
+    setup = "return {};"
+    expect_json = '[{"staticSize":24, "dynamicSize":0, "length":0, "capacity":0, "elementStaticSize":4}]'
+    expect_json_v2 = '[{"staticSize":24, "exclusiveSize":24, "length":0, "capacity":0, "members":[]}]'

@@ -93,6 +93,7 @@ class RecursiveVisitor : public Visitor<void> {
     for (const auto& param : c.templateParams) {
       accept(param.type());
     }
+    accept(c.underlying());
   }
   virtual void visit(Primitive&) {
   }
@@ -106,6 +107,9 @@ class RecursiveVisitor : public Visitor<void> {
   }
   virtual void visit(Pointer& p) {
     accept(p.pointeeType());
+  }
+  virtual void visit(Reference& r) {
+    accept(r.pointeeType());
   }
   virtual void visit(Dummy&) {
   }
@@ -126,6 +130,11 @@ class RecursiveMutator : public Visitor<Type&> {
  public:
   virtual ~RecursiveMutator() = default;
   virtual Type& mutate(Type&) = 0;
+  virtual Type* mutate(Type* type) {
+    if (type)
+      return &mutate(*type);
+    return nullptr;
+  }
   virtual Type& visit(Incomplete& i) {
     return i;
   }
@@ -148,6 +157,7 @@ class RecursiveMutator : public Visitor<Type&> {
     for (auto& param : c.templateParams) {
       param.setType(mutate(param.type()));
     }
+    c.setUnderlying(mutate(c.underlying()));
     return c;
   }
   virtual Type& visit(Primitive& p) {
@@ -165,6 +175,10 @@ class RecursiveMutator : public Visitor<Type&> {
     return td;
   }
   virtual Type& visit(Pointer& p) {
+    p.setPointeeType(mutate(p.pointeeType()));
+    return p;
+  }
+  virtual Type& visit(Reference& p) {
     p.setPointeeType(mutate(p.pointeeType()));
     return p;
   }
