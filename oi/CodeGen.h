@@ -41,8 +41,9 @@ namespace oi::detail {
 
 class CodeGen {
  public:
+  CodeGen(const OICodeGen::Config& config);
   CodeGen(const OICodeGen::Config& config, SymbolService& symbols)
-      : config_(config), symbols_(symbols) {
+      : config_(config), symbols_(&symbols) {
   }
 
   /*
@@ -57,6 +58,7 @@ class CodeGen {
                        std::list<drgn_type>& drgnTypes,
                        drgn_type** rootType) const;
 
+  bool registerContainers();
   void registerContainer(std::unique_ptr<ContainerInfo> containerInfo);
   void registerContainer(const std::filesystem::path& path);
   void addDrgnRoot(struct drgn_type* drgnType,
@@ -71,7 +73,7 @@ class CodeGen {
  private:
   type_graph::TypeGraph typeGraph_;
   const OICodeGen::Config& config_;
-  SymbolService& symbols_;
+  SymbolService* symbols_;
   std::vector<std::unique_ptr<ContainerInfo>> containerInfos_;
   std::unordered_set<const ContainerInfo*> definedContainers_;
   std::unordered_map<const type_graph::Class*, const type_graph::Member*>
