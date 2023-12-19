@@ -66,7 +66,7 @@ class OICodeGen {
     };
 
     FeatureSet features;
-    std::set<std::filesystem::path> containerConfigPaths;
+    std::vector<std::filesystem::path> containerConfigPaths;
     std::set<std::string> defaultHeaders;
     std::set<std::string> defaultNamespaces;
     std::vector<std::pair<std::string, std::string>> membersToStub;
