@@ -29,6 +29,7 @@
  * debugging.
  */
 
+#include <algorithm>
 #include <cstddef>
 #include <map>
 #include <optional>
@@ -210,29 +211,33 @@ struct TemplateParam {
  */
 class Incomplete : public Type {
  public:
-  Incomplete(Type& underlyingType) : underlyingType_(underlyingType) {
+  Incomplete(NodeId id, Type& underlyingType)
+      : id_(id), underlyingType_(underlyingType) {
   }
 
-  Incomplete(std::string underlyingTypeName)
-      : underlyingType_(std::move(underlyingTypeName)) {
+  Incomplete(NodeId id, std::string underlyingTypeName)
+      : id_(id), underlyingType_(std::move(underlyingTypeName)) {
   }
 
-  static inline constexpr bool has_node_id = false;
+  static inline constexpr bool has_node_id = true;
 
   DECLARE_ACCEPT
 
   const std::string& name() const override {
-    return kName;
+    return name_;
   }
 
   std::string_view inputName() const override {
-    if (std::holds_alternative<std::string>(underlyingType_)) {
-      return std::get<std::string>(underlyingType_);
-    }
-
-    return std::get<std::reference_wrapper<Type>>(underlyingType_)
-        .get()
-        .inputName();
+    return std::visit(
+        [](const auto& el) -> std::string_view {
+          using T = std::decay_t<decltype(el)>;
+          if constexpr (std::is_same_v<T, std::string>) {
+            return el;
+          } else {
+            return el.get().inputName();
+          }
+        },
+        underlyingType_);
   }
 
   size_t size() const override {
@@ -244,7 +249,26 @@ class Incomplete : public Type {
   }
 
   NodeId id() const override {
-    return -1;
+    return id_;
+  }
+
+  void regenerateName() {
+    std::string_view inputName = this->inputName();
+
+    constexpr std::string_view kPrefix{"Incomplete<struct "};
+    name_.clear();
+    name_.reserve(kPrefix.size() + inputName.size() + 2);
+
+    name_ = kPrefix;
+    for (const auto c : inputName) {
+      if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') ||
+          (c >= 'A' && c <= 'Z')) {
+        name_ += c;
+      } else {
+        name_ += '_';
+      }
+    }
+    name_ += ">";
   }
 
   std::optional<std::reference_wrapper<Type>> underlyingType() const {
@@ -256,8 +280,9 @@ class Incomplete : public Type {
   }
 
  private:
+  NodeId id_ = -1;
   std::variant<std::string, std::reference_wrapper<Type>> underlyingType_;
-  static const std::string kName;
+  std::string name_;
 };
 
 /*
