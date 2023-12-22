@@ -1060,7 +1060,7 @@ void addStandardTypeHandlers(TypeGraph& typeGraph,
     getSizeType(Ctx& ctx, const T &t, typename TypeHandler<Ctx, T>::type returnArg) {
       JLOG("obj @");
       JLOGPTR(&t);
-      return TypeHandler<Ctx, T>::getSizeType(ctx, t, returnArg);
+      return TypeHandler<Ctx, std::decay_t<T>>::getSizeType(ctx, t, returnArg);
     }
 )";
 
