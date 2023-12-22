@@ -1072,9 +1072,9 @@ constexpr inst::Field make_field(std::string_view name) {
     sizeof(T),
     ExclusiveSizeProvider<T>::size,
     name,
-    NameProvider<T>::names,
-    TypeHandler<Ctx, T>::fields,
-    TypeHandler<Ctx, T>::processors,
+    NameProvider<std::decay_t<T>>::names,
+    TypeHandler<Ctx, std::decay_t<T>>::fields,
+    TypeHandler<Ctx, std::decay_t<T>>::processors,
   };
 }
 )";
