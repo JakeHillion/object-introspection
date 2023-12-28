@@ -445,3 +445,153 @@ Proc OilIntegration::runOilTarget(OilOpts opts,
               std::move(std_out),
               std::move(std_err)};
 }
+
+std::string OilgenIntegration::TmpDirStr() {
+  return std::string("/tmp/oilgen-integration-XXXXXX");
+}
+
+Proc OilgenIntegration::runOilgenTarget(OilgenOpts opts,
+                                  std::string configPrefix,
+                                  std::string configSuffix) {
+  // Run an oilgen test in three stages.
+  // 1. Generate the OIL implementation .o from the input source.
+  // 2. Compile the input source and link to the implementation.
+  // 3. Run the now complete target.
+
+  auto path = workingDir / "input_src.cpp";
+  {
+    std::ofstream file{path, std::ios_base::app};
+    file << opts.targetSrc;
+  }
+
+  std::string generatorExe = std::string(OILGEN_EXE_PATH) + " " + path.native() + " ";
+  if (auto prefix = writeCustomConfig("prefix", configPrefix)) {
+    generatorExe += "--config-file ";
+    generatorExe += *prefix;
+    generatorExe += " ";
+  }
+  generatorExe += "--config-file ";
+  generatorExe += configFile;
+  if (auto suffix = writeCustomConfig("suffix", configSuffix)) {
+    generatorExe += " ";
+    generatorExe += "--config-file ";
+    generatorExe += *suffix;
+  }
+
+  // TODO: get this from the CMake arguments for integration_test_target.cpp somehow
+  std::vector<std::string> clangArgs{
+      "-DOIL_AOT_COMPILATION=1",
+      "-isystem",
+      "/data/users/jakehillion/object-introspection-sl/include",
+      "--std=c++20",
+      "-resource-dir",
+      "/usr/lib64/clang/15.0.7",
+      "-fpic",
+      "-isystem",
+      "/opt/rh/gcc-toolset-12/root/usr/lib/gcc/x86_64-redhat-linux/12/../../../../include/c++/12",
+      "-isystem",
+      "/opt/rh/gcc-toolset-12/root/usr/lib/gcc/x86_64-redhat-linux/12/../../../../include/c++/12/x86_64-redhat-linux",
+      "-isystem",
+      "/opt/rh/gcc-toolset-12/root/usr/lib/gcc/x86_64-redhat-linux/12/../../../../include/c++/12/backward",
+      "-isystem",
+      "/usr/lib64/clang/15.0.7/include",
+      "-isystem",
+      "/usr/local/include",
+      "-isystem",
+      "/opt/rh/gcc-toolset-12/root/usr/lib/gcc/x86_64-redhat-linux/12/../../../../x86_64-redhat-linux/include",
+      "-isystem",
+      "/include",
+      "-isystem",
+      "/usr/include",
+      "-fdebug-compilation-dir=/data/users/jakehillion/Downloads/libclang-oilgen-testing",
+      "-fgnuc-version=4.2.1",
+      "-fcxx-exceptions",
+      "-fexceptions",
+      "-faddrsig",
+      "-D__GCC_HAVE_DWARF2_CFI_ASM=1",
+      "-x",
+      "c++",
+  };
+  for (const auto& arg : clangArgs) {
+    generatorExe += " --extra-arg=";
+    generatorExe += arg;
+  }
+
+  if (verbose) {
+    std::cerr << "Running: " << generatorExe << std::endl;
+  }
+
+  bp::child generatorProc{generatorExe, opts.ctx};
+  generatorProc.wait();
+  if (generatorProc.exit_code() != 0)
+    throw std::runtime_error("generation failed!");
+
+  std::string compilerExe = std::string(CXX) + " a.o input_src.cpp /data/users/jakehillion/object-introspection-sl/oi/exporters/Json.cpp /data/users/jakehillion/object-introspection-sl/oi/IntrospectionResult.cpp /data/users/jakehillion/object-introspection-sl/oi/exporters/ParsedData.cpp";
+  for (const auto& arg : clangArgs) {
+    compilerExe += ' ';
+    compilerExe += arg;
+  }
+
+  if (verbose) {
+    std::cerr << "Running: " << compilerExe << std::endl;
+  }
+
+  bp::child compilerProc{compilerExe, opts.ctx};
+  compilerProc.wait();
+  if (compilerProc.exit_code() != 0)
+    throw std::runtime_error("compilation failed");
+
+  std::string targetExe = "./a.out";
+  if (verbose) {
+    std::cerr << "Running: " << targetExe << std::endl;
+  }
+
+  // Use tee to write the output to files. If verbose is on, also redirect the
+  // output to stderr.
+  bp::async_pipe std_out_pipe(opts.ctx), std_err_pipe(opts.ctx);
+  bp::child std_out, std_err;
+  if (verbose) {
+    // clang-format off
+    std_out = bp::child(bp::search_path("tee"),
+                        (workingDir / "stdout").string(),
+                        bp::std_in < std_out_pipe,
+                        bp::std_out > stderr,
+                        opts.ctx);
+    std_err = bp::child(bp::search_path("tee"),
+                        (workingDir / "stderr").string(),
+                        bp::std_in < std_err_pipe,
+                        bp::std_out > stderr,
+                        opts.ctx);
+    // clang-format on
+  } else {
+    // clang-format off
+    std_out = bp::child(bp::search_path("tee"),
+                        (workingDir / "stdout").string(),
+                        bp::std_in < std_out_pipe,
+                        bp::std_out > bp::null,
+                        opts.ctx);
+    std_err = bp::child(bp::search_path("tee"),
+                        (workingDir / "stderr").string(),
+                        bp::std_in < std_err_pipe,
+                        bp::std_out > bp::null,
+                        opts.ctx);
+    // clang-format on
+  }
+
+  /* Spawn `oid` with tracing on and IOs redirected */
+  // clang-format off
+  bp::child targetProc(
+      targetExe,
+      bp::std_in  < bp::null,
+      bp::std_out > std_out_pipe,
+      bp::std_err > std_err_pipe,
+      opts.ctx);
+  // clang-format on
+
+  return Proc{
+    opts.ctx,
+    std::move(targetProc),
+    std::move(std_out),
+    std::move(std_err),
+  };
+}
