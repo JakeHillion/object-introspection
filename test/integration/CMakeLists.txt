@@ -63,7 +63,10 @@ target_link_libraries(integration_test_runner PRIVATE
 target_compile_definitions(integration_test_runner PRIVATE
   TARGET_EXE_PATH="${CMAKE_CURRENT_BINARY_DIR}/integration_test_target"
   OID_EXE_PATH="$<TARGET_FILE:oid>"
-  CONFIG_FILE_PATH="${CMAKE_BINARY_DIR}/testing.oid.toml")
+  OILGEN_EXE_PATH="$<TARGET_FILE:oilgen>"
+  CONFIG_FILE_PATH="${CMAKE_BINARY_DIR}/testing.oid.toml"
+  CXX="${CMAKE_CXX_COMPILER}"
+)
 
 if (${THRIFT_FOUND})
   foreach(THRIFT_TEST IN LISTS THRIFT_TESTS)
