@@ -60,6 +60,7 @@ using type_graph::EnforceCompatibility;
 using type_graph::Enum;
 using type_graph::Flattener;
 using type_graph::IdentifyContainers;
+using type_graph::Incomplete;
 using type_graph::KeyCapture;
 using type_graph::Member;
 using type_graph::NameGen;
@@ -438,6 +439,13 @@ void addStandardGetSizeFuncDefs(std::string& code) {
     template<typename T>
     void getSizeType(/*const*/ T* s_ptr, size_t& returnArg)
     {
+      if constexpr (!oi_is_complete<T>) {
+        JLOG("incomplete ptr @");
+        JLOGPTR(s_ptr);
+        StoreData((uintptr_t)(s_ptr), returnArg);
+        return;
+      }
+
       JLOG("ptr val @");
       JLOGPTR(s_ptr);
       StoreData((uintptr_t)(s_ptr), returnArg);
@@ -447,13 +455,6 @@ void addStandardGetSizeFuncDefs(std::string& code) {
       } else {
         StoreData(0, returnArg);
       }
-    }
-
-    void getSizeType(/*const*/ void *s_ptr, size_t& returnArg)
-    {
-      JLOG("void ptr @");
-      JLOGPTR(s_ptr);
-      StoreData((uintptr_t)(s_ptr), returnArg);
     }
 
     template <typename T, int N>
