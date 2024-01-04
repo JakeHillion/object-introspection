@@ -60,6 +60,7 @@ using type_graph::EnforceCompatibility;
 using type_graph::Enum;
 using type_graph::Flattener;
 using type_graph::IdentifyContainers;
+using type_graph::Incomplete;
 using type_graph::KeyCapture;
 using type_graph::Member;
 using type_graph::NameGen;
@@ -181,12 +182,20 @@ void genDeclsEnum(const Enum& e, std::string& code) {
   code += " {};\n";
 }
 
+void genDeclsIncomplete(const Incomplete& i, std::string& code) {
+  code += "template<> struct ";
+  code += i.name();
+  code += ";\n";
+}
+
 void genDecls(const TypeGraph& typeGraph, std::string& code) {
   for (const Type& t : typeGraph.finalTypes) {
     if (const auto* c = dynamic_cast<const Class*>(&t)) {
       genDeclsClass(*c, code);
     } else if (const auto* e = dynamic_cast<const Enum*>(&t)) {
       genDeclsEnum(*e, code);
+    } else if (const auto* i = dynamic_cast<const Incomplete*>(&t)) {
+      genDeclsIncomplete(*i, code);
     }
   }
 }
