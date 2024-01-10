@@ -71,6 +71,7 @@ static constexpr inst::Field element{
   std::array<std::string_view, 0>{},
   child_field,
   std::array<inst::ProcessorInst, 0>{},
+  child_field.is_primitive,
 };
 static constexpr auto childField = make_field<Ctx, T0>("[]");
 
