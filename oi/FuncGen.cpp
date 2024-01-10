@@ -399,7 +399,8 @@ const std::array<std::string_view, )";
       ", OIInternal::TypeHandler<FakeContext, "
       "OIInternal::__ROOT_TYPE__>::fields, "
       "OIInternal::TypeHandler<FakeContext, "
-      "OIInternal::__ROOT_TYPE__>::processors};\n";
+      "OIInternal::__ROOT_TYPE__>::processors, "
+      "std::is_fundamental_v<OIInternal::__ROOT_TYPE__>};\n";
   code += "} // namespace\n";
   code +=
       "extern const exporters::inst::Inst __attribute__((used, retain)) "
