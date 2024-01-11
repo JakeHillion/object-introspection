@@ -72,7 +72,6 @@ static constexpr inst::Field element{
   child_field,
   std::array<inst::ProcessorInst, 0>{},
 };
-static constexpr auto childField = make_field<Ctx, T0>("[]");
 
 auto list = std::get<ParsedData::List>(d.val);
 el.container_stats.emplace(result::Element::ContainerStats{
@@ -81,5 +80,5 @@ el.container_stats.emplace(result::Element::ContainerStats{
 });
 el.exclusive_size += (el.container_stats->capacity - el.container_stats->length) * sizeof(T0);
 
-stack_ins(inst::Repeat{ list.length, childField });
+stack_ins(inst::Repeat{ list.length, element });
 """
