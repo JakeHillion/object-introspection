@@ -175,7 +175,7 @@ Type& ClangTypeParser::enumerateClass(const clang::RecordType& ty) {
   if (auto* info = getContainerInfo(fqName)) {
     auto& c = makeType<Container>(ty, *info, size, nullptr);
     enumerateClassTemplateParams(ty, c.templateParams);
-    c.setAlign(ast->getTypeAlign(clang::QualType(&ty, 0)));
+    c.setAlign(ast->getTypeAlign(clang::QualType(&ty, 0)) / 8);
     return c;
   }
 
@@ -194,6 +194,7 @@ Type& ClangTypeParser::enumerateClass(const clang::RecordType& ty) {
 
   auto& c = makeType<Class>(
       ty, kind, std::move(name), std::move(fqName), size, virtuality);
+  c.setAlign(ast->getTypeAlign(clang::QualType(&ty, 0)) / 8);
 
   enumerateClassTemplateParams(ty, c.templateParams);
   // enumerateClassParents(type, c.parents);
@@ -294,7 +295,6 @@ void ClangTypeParser::enumerateClassMembers(const clang::RecordType& ty,
 
     auto& mtype = enumerateType(*qualType);
     Member m{mtype, std::move(member_name), offset_in_bits, size_in_bits};
-    m.align = decl->getASTContext().getTypeAlign(qualType) / 8;
     members.push_back(m);
   }
 
