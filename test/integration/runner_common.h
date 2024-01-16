@@ -51,6 +51,8 @@ class IntegrationBase : public ::testing::Test {
   std::string stdout_;
   std::string stderr_;
 
+  std::vector<std::string> features;
+
   /*
    * compare_json
    *
