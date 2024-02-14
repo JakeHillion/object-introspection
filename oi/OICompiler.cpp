@@ -499,6 +499,7 @@ bool OICompiler::compile(const std::string& code,
   compInv->getLangOpts()->Exceptions = true;
   compInv->getLangOpts()->CXXExceptions = true;
   compInv->getLangOpts()->Coroutines = true;
+  compInv->getLangOpts()->AlignedAllocation = true;
 
   compInv->getPreprocessorOpts();
   compInv->getPreprocessorOpts().addRemappedFile(
@@ -576,6 +577,7 @@ bool OICompiler::compile(const std::string& code,
   if (config.features[Feature::GenJitDebug]) {
     compInv->getCodeGenOpts().setDebugInfo(codegenoptions::FullDebugInfo);
   }
+  compInv->getDiagnosticOpts().TemplateBacktraceLimit = 0;
 
   CompilerInstance compInstance;
   compInstance.setInvocation(compInv);

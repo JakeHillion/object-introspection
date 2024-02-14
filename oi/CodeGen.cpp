@@ -83,6 +83,10 @@ namespace {
 std::vector<std::string_view> enumerateTypeNames(Type& type) {
   std::vector<std::string_view> names;
   Type* t = &type;
+
+  if (const auto* ck = dynamic_cast<CaptureKeys*>(t))
+    t = &ck->underlyingType();
+
   while (const Typedef* td = dynamic_cast<Typedef*>(t)) {
     names.emplace_back(t->inputName());
     t = &td->underlyingType();
@@ -217,6 +221,13 @@ void genNames(const TypeGraph& typeGraph, std::string& code) {
   code += R"(
 template <typename T>
 struct NameProvider;
+)";
+
+  code += R"(
+template <unsigned int N, unsigned int align, int32_t Id>
+struct NameProvider<DummySizedOperator<N, align, Id>> {
+  static constexpr std::array<std::string_view, 0> names = { };
+};
 )";
 
   // TODO: stop types being duplicated at this point and remove this check
@@ -1152,9 +1163,14 @@ void CodeGen::addTypeHandlers(const TypeGraph& typeGraph, std::string& code) {
       genContainerTypeHandler(
           definedContainers_, con->containerInfo_, con->templateParams, code);
     } else if (const auto* cap = dynamic_cast<const CaptureKeys*>(&t)) {
+      auto* container =
+          dynamic_cast<Container*>(&(stripTypedefs(cap->underlyingType())));
+      if (!container)
+        throw std::runtime_error("KaptureKeys requires a container");
+
       genContainerTypeHandler(definedContainers_,
                               cap->containerInfo(),
-                              cap->container().templateParams,
+                              container->templateParams,
                               code);
     }
   }
