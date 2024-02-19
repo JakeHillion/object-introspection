@@ -50,6 +50,7 @@ class Array;
 class Class;
 class Enum;
 class Member;
+struct Parent;
 class Primitive;
 class Reference;
 class Type;
@@ -60,6 +61,8 @@ struct TemplateParam;
 struct ClangTypeParserOptions {
   bool chaseRawPointers = false;
   bool readEnumValues = false;
+  std::set<std::string_view> typesToStub;
+  std::set<std::string_view> mustProcessTemplateParams;
 };
 
 /*
@@ -114,6 +117,7 @@ class ClangTypeParser {
   std::optional<TemplateParam> enumerateTemplateTemplateParam(
       const clang::TemplateName&);
 
+  void enumerateClassParents(const clang::RecordType&, std::vector<Parent>&);
   void enumerateClassMembers(const clang::RecordType&, std::vector<Member>&);
 
   ContainerInfo* getContainerInfo(const std::string& fqName) const;

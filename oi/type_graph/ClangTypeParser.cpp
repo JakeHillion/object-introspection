@@ -17,8 +17,10 @@
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
+#include <clang/AST/DeclCXX.h>
 #include <clang/AST/DeclTemplate.h>
 #include <clang/AST/QualTypeNames.h>
+#include <clang/AST/RecordLayout.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/DiagnosticSema.h>
 #include <clang/Sema/Sema.h>
@@ -71,6 +73,7 @@ Type& ClangTypeParser::enumerateType(const clang::Type& ty) {
   if (!requireCompleteType(*sema, ty)) {
     std::string fqName = clang::TypeName::getFullyQualifiedName(
         clang::QualType(&ty, 0), *ast, {ast->getLangOpts()});
+    VLOG(3) << "Returning incomplete type for " << fqName;
     return makeType<Incomplete>(ty, std::move(fqName));
   }
 
@@ -194,14 +197,26 @@ Type& ClangTypeParser::enumerateClass(const clang::RecordType& ty) {
 
   int virtuality = 0;
 
+  std::string fqnWithoutTemplateParams = decl->getQualifiedNameAsString();
+
+  if (options_.typesToStub.contains(fqnWithoutTemplateParams)) {
+    uint64_t alignment = decl->getASTContext()
+                             .getASTRecordLayout(decl)
+                             .getAlignment()
+                             .getQuantity();
+    auto& c = makeType<Dummy>(ty, size, alignment, fqName);
+    return c;
+  }
+
   auto& c = makeType<Class>(
       ty, kind, std::move(name), std::move(fqName), size, virtuality);
   c.setAlign(ast->getTypeAlign(clang::QualType(&ty, 0)) / 8);
 
-  enumerateClassTemplateParams(ty, c.templateParams);
-  // enumerateClassParents(type, c.parents);
+  if (options_.mustProcessTemplateParams.contains(fqnWithoutTemplateParams))
+    enumerateClassTemplateParams(ty, c.templateParams);
+
+  enumerateClassParents(ty, c.parents);
   enumerateClassMembers(ty, c.members);
-  // enumerateClassFunctions(type, c.functions);
 
   return c;
 }
@@ -298,6 +313,31 @@ std::optional<TemplateParam> ClangTypeParser::enumerateTemplateTemplateParam(
   }
 }
 
+void ClangTypeParser::enumerateClassParents(const clang::RecordType& ty,
+                                            std::vector<Parent>& parents) {
+  assert(parents.empty());
+
+  auto* decl = ty.getDecl();
+  auto* cxxDecl = llvm::dyn_cast<clang::CXXRecordDecl>(decl);
+  if (cxxDecl == nullptr)
+    return;
+
+  const auto& layout = decl->getASTContext().getASTRecordLayout(cxxDecl);
+  for (const auto& base : cxxDecl->bases()) {
+    auto baseType = base.getType();
+    if (baseType.isNull())
+      continue;
+
+    auto* baseCxxDecl = baseType->getAsCXXRecordDecl();
+    if (baseCxxDecl == nullptr)
+      continue;
+
+    auto offset = layout.getBaseClassOffset(baseCxxDecl).getQuantity();
+    auto& ptype = enumerateType(*baseType);
+    parents.emplace_back(Parent{ptype, static_cast<uint64_t>(offset)});
+  }
+}
+
 void ClangTypeParser::enumerateClassMembers(const clang::RecordType& ty,
                                             std::vector<Member>& members) {
   assert(members.empty());
@@ -317,6 +357,7 @@ void ClangTypeParser::enumerateClassMembers(const clang::RecordType& ty,
 
     auto& mtype = enumerateType(*qualType);
     Member m{mtype, std::move(member_name), offset_in_bits, size_in_bits};
+    m.align = field->getMaxAlignment() / 8;
     members.push_back(m);
   }
 
