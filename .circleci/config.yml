@@ -104,6 +104,7 @@ jobs:
           paths:
             - build/*
             - extern/*
+            - include/*
             - types/*
 
   test:
