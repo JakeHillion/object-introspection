@@ -1,5 +1,5 @@
 {
-  description = "A flake for building Object Introspection.";
+  description = "Object level memory profiler for C++";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
@@ -11,6 +11,9 @@
   };
 
   outputs = { self, nixpkgs, flake-utils, treefmt-nix, ... }@inputs:
+    flake-utils.lib.eachSystem [ "x86_64-linux" ] (system:
+      {}
+    ) //
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
