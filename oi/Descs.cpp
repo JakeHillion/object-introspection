@@ -50,10 +50,11 @@ std::optional<uintptr_t> FuncDesc::Arg::findAddress(
   if (auto* err = drgn_object_locate(&locator, &modifiedRegs, &object)) {
     LOG(ERROR) << "Error while finding address of argument: " << err->message;
     drgn_error_destroy(err);
-    return std::nullopt;
+  } else {
+    return object.address;
   }
 
-  return object.address;
+  return oi::detail::arch::naiveReadArgument(*regs, index);
 }
 
 std::optional<uint8_t> FuncDesc::getArgumentIndex(const std::string& arg,
