@@ -100,7 +100,9 @@
           };
 
         mkOidDevShell =
-          pkg: with pkgs; pkgs.mkShell { buildInputs = [ ] ++ pkg.nativeBuildInputs ++ pkg.buildInputs; };
+          pkg:
+          with pkgs;
+          pkgs.mkShell { buildInputs = [ lcov ] ++ pkg.nativeBuildInputs ++ pkg.buildInputs; };
 
         pkgs = import nixpkgs { inherit system; };
       in
