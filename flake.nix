@@ -32,8 +32,11 @@
         };
 
         mkOidPackage =
-          llvmPackages:
+          llvmVersion:
           with pkgs;
+          let
+            llvmPackages = pkgs."llvmPackages_${toString llvmVersion}";
+          in
           llvmPackages.stdenv.mkDerivation rec {
             name = "oid";
 
