@@ -21,7 +21,7 @@
     flake-utils.lib.eachSystem [ flake-utils.lib.system.x86_64-linux ] (
       system:
       let
-        pkgs = import nixpkgs { inherit system; };
+        defaultLlvmVersion = 16;
 
         drgnSrc = pkgs.fetchFromGitHub {
           owner = "JakeHillion";
@@ -32,8 +32,11 @@
         };
 
         mkOidPackage =
-          llvmPackages:
+          llvmVersion:
           with pkgs;
+          let
+            llvmPackages = pkgs."llvmPackages_${toString llvmVersion}";
+          in
           llvmPackages.stdenv.mkDerivation rec {
             name = "oid";
 
@@ -95,13 +98,24 @@
 
             outputs = [ "out" ];
           };
+
+        mkOidDevShell =
+          pkg: with pkgs; pkgs.mkShell { buildInputs = [ ] ++ pkg.nativeBuildInputs ++ pkg.buildInputs; };
+
+        pkgs = import nixpkgs { inherit system; };
       in
       {
-        packages = rec {
-          default = oid-llvm16;
+        packages = {
+          default = self.packages.${system}."oid-llvm${toString defaultLlvmVersion}";
 
-          oid-llvm15 = mkOidPackage pkgs.llvmPackages_15;
-          oid-llvm16 = mkOidPackage pkgs.llvmPackages_16;
+          oid-llvm15 = mkOidPackage 15;
+          oid-llvm16 = mkOidPackage 16;
+        };
+        devShells = {
+          default = self.devShells.${system}."oid-llvm${toString defaultLlvmVersion}";
+
+          oid-llvm15 = mkOidDevShell self.packages.${system}.oid-llvm15;
+          oid-llvm16 = mkOidDevShell self.packages.${system}.oid-llvm16;
         };
 
         apps.default = {
